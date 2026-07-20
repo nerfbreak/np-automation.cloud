@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { extractNewspageStock, BotProgressEvent } from "@/lib/newspage-bot"
+import { extractNewspageStock, isBrowserBusy, BotProgressEvent } from "@/lib/newspage-bot"
 import { supabaseAdmin } from "@/lib/supabase"
 import { decrypt } from "@/lib/crypto"
 
@@ -14,6 +14,13 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       const send = (event: BotProgressEvent) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+      }
+
+      // Cek apakah browser sedang dipakai task lain
+      if (isBrowserBusy()) {
+        send({ type: "error", message: "⚠️ Sistem sedang memproses task lain. Tunggu sebentar dan coba lagi." })
+        controller.close()
+        return
       }
 
       try {

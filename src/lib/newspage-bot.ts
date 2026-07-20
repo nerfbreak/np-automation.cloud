@@ -108,6 +108,11 @@ export async function closeBrowser(force = false): Promise<void> {
   }
 }
 
+/** Cek apakah browser sedang dipakai oleh extract atau adjustment job */
+export function isBrowserBusy(): boolean {
+  return (globalAny.browserRefCount || 0) > 0
+}
+
 /**
  * findFrame — search all frames (main + iframes) for an element by ID.
  * Newspage loads its content in nested iframes.
