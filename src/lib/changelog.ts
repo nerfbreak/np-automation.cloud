@@ -11,9 +11,38 @@ export type ChangelogEntry = {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: "0.3.0",
+    version: "0.4.0",
     date: "20 Juli 2026",
     isNew: true,
+    changes: [
+      {
+        type: "Added",
+        items: [
+          "RAM Guard System: antrean task otomatis jika sisa RAM VPS di bawah 700MB untuk mencegah OOM (Out of Memory)",
+          "Tombol Cancel Task (🚫) di halaman Active Tasks untuk membatalkan job yang menyangkut (Force Cancel)",
+          "Safe deployment script (deploy.sh) untuk mencegah downtime / 502 Bad Gateway jika build gagal",
+        ],
+      },
+      {
+        type: "Changed",
+        items: [
+          "Default batas maksimal proses (concurrent browser) diturunkan dari 3 menjadi 2 demi stabilitas VPS",
+        ],
+      },
+      {
+        type: "Fixed",
+        items: [
+          "Bug 502 Bad Gateway akibat zombie process Chromium memakan habis RAM (ditambah fallback SIGKILL)",
+          "Pesan status di tabel Report/Tasks kini menampilkan jumlah SKU yang benar-benar dieksekusi (bukan total input)",
+          "Error render Base-UI tooltip saat menampilkan fitur Cancel Task",
+          "Kompatibilitas API route dengan Next.js 15 (Promise-based params) untuk endpoint pembatalan job",
+        ],
+      },
+    ],
+  },
+  {
+    version: "0.3.0",
+    date: "20 Juli 2026",
     changes: [
       {
         type: "Added",
