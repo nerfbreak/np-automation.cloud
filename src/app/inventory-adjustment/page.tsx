@@ -16,7 +16,7 @@ import { ManualGrid, ManualRow } from "@/components/inventory/manual-grid"
 import { ExecutionProgress, ExecutionItem } from "@/components/inventory/execution-progress"
 import { ResultPanel } from "@/components/inventory/result-panel"
 import { mockNewspageStock, mockDistributorStock } from "@/mocks/distributors"
-import { GitCompareArrows, ClipboardList, Loader2, Copy, Download } from "lucide-react"
+import { GitCompareArrows, ClipboardList, Loader2, Copy, Download, Timer, AlertCircle, ChevronRight } from "lucide-react"
 import { InlineAlert } from "@/components/feedback/inline-alert"
 import { BotProgressEvent } from "@/lib/newspage-bot"
 import { toast } from "sonner"
@@ -165,7 +165,7 @@ export default function InventoryAdjustmentPage() {
           if (!line.startsWith("data: ")) continue
           try {
             const event = JSON.parse(line.slice(6))
-            if (event.message) setExtractLogs((prev) => [...prev, event.message!])
+            if (event.message) setExtractLogs((prev) => [...prev, { type: event.type ?? "log", message: event.message! }])
             if (event.type === "screenshot") {
               // Intermediate debug screenshot — show in UI
               setScreenshotBase64(event.screenshotBase64 ?? "")
@@ -520,7 +520,7 @@ export default function InventoryAdjustmentPage() {
                             <Tooltip>
                               <TooltipTrigger
                                 onClick={() => {
-                                  navigator.clipboard.writeText(extractLogs.join("\n"))
+                                  navigator.clipboard.writeText(extractLogs.map(l => l.message).join("\n"))
                                   toast.success("Log disalin!", { description: `${extractLogs.length} baris tersalin ke clipboard.` })
                                 }}
                                 className="absolute top-2 right-2 text-green-400/50 hover:text-green-300 transition-colors"
@@ -531,9 +531,24 @@ export default function InventoryAdjustmentPage() {
                                 Copy all logs
                               </TooltipContent>
                             </Tooltip>
-                            {extractLogs.map((log, i) => (
-                              <div key={i}>› {log}</div>
-                            ))}
+                            {extractLogs.map((log, i) => {
+                              const isWaiting = log.type === "waiting"
+                              const isError = log.type === "error"
+                              return (
+                                <div key={i} className={`flex items-start gap-1.5 ${
+                                  isWaiting ? "text-amber-400" :
+                                  isError ? "text-red-400" :
+                                  "text-green-400"
+                                }`}>
+                                  {isWaiting
+                                    ? <Timer className="h-3 w-3 mt-0.5 shrink-0 animate-pulse" />
+                                    : isError
+                                    ? <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                                    : <ChevronRight className="h-3 w-3 mt-0.5 shrink-0" />}
+                                  <span>{log.message}</span>
+                                </div>
+                              )
+                            })}
                             {extracting && <div className="animate-pulse">› ...</div>}
                           </div>
                         )}

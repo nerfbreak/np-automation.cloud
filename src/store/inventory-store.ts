@@ -14,7 +14,7 @@ interface InventoryState {
   
   extracting: boolean
   extracted: boolean
-  extractLogs: string[]
+  extractLogs: { type: string; message: string }[]
   realNewspageStock: { sku: string; productName: string; qty: number }[] | null
   
   uploadedFile: File | null
@@ -43,7 +43,7 @@ interface InventoryState {
   
   setExtracting: (val: boolean) => void
   setExtracted: (val: boolean) => void
-  setExtractLogs: (logs: string[] | ((prev: string[]) => string[])) => void
+  setExtractLogs: (logs: { type: string; message: string }[] | ((prev: { type: string; message: string }[]) => { type: string; message: string }[])) => void
   setRealNewspageStock: (stock: any[] | null) => void
   setUploadedFile: (file: File | null) => void
   setMapping: (mapping: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>)) => void
