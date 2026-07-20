@@ -334,12 +334,25 @@ export async function extractNewspageStock(
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const frame = await findFrame(page, frameNavId)
-        await frame.locator(`#${frameNavId}`).hover()
+        
+        // Coba Playwright native hover dulu
+        await frame.locator(`#${frameNavId}`).hover({ force: true, timeout: 5000 }).catch(async (err) => {
+          // Fallback ke JS Events kalau native hover ditolak/gagal
+          console.warn(`Native hover gagal, mencoba JS events... Error: ${err.message}`)
+          await frame.evaluate((elId) => {
+            const el = document.getElementById(elId)
+            if (el) {
+              el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }))
+              el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true, view: window }))
+            }
+          }, frameNavId)
+        })
+        
         await smartWait(page, attempt * 1000) // 1s → 2s → 3s
         hoverOk = true
         break
-      } catch (err) {
-        onProgress({ type: "log", message: `⚠️ Hover SysAdminSetup attempt ${attempt}/3 gagal, retry...` })
+      } catch (err: any) {
+        onProgress({ type: "log", message: `⚠️ Hover SysAdminSetup attempt ${attempt}/3 gagal: ${err.message}` })
         if (attempt === 3) {
           // Ambil screenshot buat debug
           const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
