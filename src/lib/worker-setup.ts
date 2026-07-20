@@ -144,14 +144,14 @@ globalAny.inventoryWorker = new Worker(
         }
 
         // Kill browser setelah job selesai untuk free RAM di VPS
-        await closeBrowser()
+        await closeBrowser(distributor.username)
         console.log(`[Job ${job.id}] Browser closed.`)
 
         return { success: true }
       } catch (error: any) {
         console.error(`[Job ${job.id}] Failed:`, error.message)
         // Force close browser saat error — buang session stale agar job berikutnya fresh
-        await closeBrowser(true).catch(() => {})
+        await closeBrowser(distributor?.username ?? distributorUsername, true).catch(() => {})
         await supabaseAdmin
           .from('jobs')
           .update({ 

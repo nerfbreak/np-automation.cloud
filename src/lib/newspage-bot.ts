@@ -42,75 +42,91 @@ export interface ExtractedStockRow {
 // ── Browser Singleton ───────────────────────────────────────────────────────────
 const globalAny: any = globalThis
 
-async function getOrCreateBrowser(): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
-  // Cek kalau udah ada di memory (karena sekarang Next.js dan Worker jalan di proses yang sama)
-  if (globalAny.activePage && globalAny.activeBrowser && globalAny.activeBrowser.isConnected() && !globalAny.activePage.isClosed()) {
-    globalAny.browserRefCount = (globalAny.browserRefCount || 0) + 1
-    return { browser: globalAny.activeBrowser, context: globalAny.activeContext, page: globalAny.activePage }
-  }
-
-  // Kalau belum ada browser sama sekali, buka baru
-  globalAny.activeBrowser = await chromium.launch({
-      headless: true, // Berjalan secara background
-      args: [
-        "--remote-allow-origins=*",
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--window-size=1280,720",
-      ],
-    })
-    
-    globalAny.activeContext = await globalAny.activeBrowser.newContext({
-      viewport: { width: 1920, height: 1080 },
-      acceptDownloads: true,
-    })
-    globalAny.activePage = await globalAny.activeContext.newPage()
-    globalAny.activePage.setDefaultTimeout(TIMEOUT)
-    globalAny.activePage.setDefaultNavigationTimeout(TIMEOUT)
-    globalAny.browserRefCount = 1 // Reset counter untuk browser baru
-    
-    return { browser: globalAny.activeBrowser, context: globalAny.activeContext, page: globalAny.activePage }
+// ─── Browser Pool ─────────────────────────────────────────────────────────────
+// Tiap distributor (username) punya browser instance sendiri.
+// Ini memungkinkan beberapa user jalan bersamaan tanpa konflik session.
+interface BrowserInstance {
+  browser: Browser
+  context: BrowserContext
+  page: Page
+  refCount: number
 }
 
-export async function closeBrowser(force = false): Promise<void> {
+function getBrowserPool(): Map<string, BrowserInstance> {
+  if (!globalAny.browserPool) globalAny.browserPool = new Map<string, BrowserInstance>()
+  return globalAny.browserPool
+}
+
+async function getOrCreateBrowser(username: string): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
+  const pool = getBrowserPool()
+  const existing = pool.get(username)
+
+  // Reuse browser kalau masih hidup
+  if (existing && existing.browser.isConnected() && !existing.page.isClosed()) {
+    existing.refCount++
+    console.log(`[Browser:${username}] Reuse session (ref: ${existing.refCount})`)
+    return { browser: existing.browser, context: existing.context, page: existing.page }
+  }
+
+  // Buka browser baru untuk username ini
+  console.log(`[Browser:${username}] Membuka browser baru...`)
+  const browser = await chromium.launch({
+    headless: true,
+    args: [
+      "--remote-allow-origins=*",
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--window-size=1280,720",
+    ],
+  })
+
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+    acceptDownloads: true,
+  })
+  const page = await context.newPage()
+  page.setDefaultTimeout(TIMEOUT)
+  page.setDefaultNavigationTimeout(TIMEOUT)
+
+  const instance: BrowserInstance = { browser, context, page, refCount: 1 }
+  pool.set(username, instance)
+  return { browser, context, page }
+}
+
+export async function closeBrowser(username: string, force = false): Promise<void> {
+  const pool = getBrowserPool()
+  const instance = pool.get(username)
+  if (!instance) return
+
   if (!force) {
-    // Kurangi ref count — hanya tutup browser kalau tidak ada yang pakai
-    globalAny.browserRefCount = Math.max(0, (globalAny.browserRefCount || 0) - 1)
-    if (globalAny.browserRefCount > 0) {
-      console.log(`[Browser] masih dipakai (ref: ${globalAny.browserRefCount}), skip close.`)
+    instance.refCount = Math.max(0, instance.refCount - 1)
+    if (instance.refCount > 0) {
+      console.log(`[Browser:${username}] masih dipakai (ref: ${instance.refCount}), skip close.`)
       return
     }
   } else {
-    // Force close: reset refCount, buang session stale
-    console.log(`[Browser] Force close! Session stale di-reset.`)
-    globalAny.browserRefCount = 0
+    console.log(`[Browser:${username}] Force close! Session stale di-reset.`)
+    instance.refCount = 0
   }
 
-  if (globalAny.activeBrowser) {
-    try {
-      if (globalAny.activePage) {
-        await globalAny.activePage.close().catch(() => {})
-      }
-      if (globalAny.activeContext) {
-        await globalAny.activeContext.close().catch(() => {})
-      }
-      await globalAny.activeBrowser.close()
-      console.log(`[Browser] Closed. RAM freed.`)
-    } catch (e) {
-      console.error("Failed to close browser:", e)
-    }
-    globalAny.activeBrowser = null
-    globalAny.activeContext = null
-    globalAny.activePage = null
-    globalAny.browserRefCount = 0
+  try {
+    await instance.page.close().catch(() => {})
+    await instance.context.close().catch(() => {})
+    await instance.browser.close()
+    console.log(`[Browser:${username}] Closed. RAM freed.`)
+  } catch (e) {
+    console.error(`[Browser:${username}] Failed to close:`, e)
   }
+  pool.delete(username)
 }
 
-/** Cek apakah browser sedang dipakai oleh extract atau adjustment job */
-export function isBrowserBusy(): boolean {
-  return (globalAny.browserRefCount || 0) > 0
+/** Cek apakah browser untuk username tertentu sedang dipakai */
+export function isBrowserBusy(username: string): boolean {
+  const pool = getBrowserPool()
+  const instance = pool.get(username)
+  return instance ? instance.refCount > 0 : false
 }
 
 /**
@@ -255,7 +271,7 @@ export async function extractNewspageStock(
   warehouseCode: string,
   onProgress: ProgressCallback
 ): Promise<{ rows: ExtractedStockRow[], rawCsv: string }> {
-  const { browser, page } = await getOrCreateBrowser()
+  const { browser, page } = await getOrCreateBrowser(creds.username)
 
   try {
     await login(page, creds, onProgress)
@@ -507,7 +523,7 @@ export async function executeStockAdjustment(
   remark: string,
   onProgress: ProgressCallback
 ): Promise<string> {
-  const { browser, page } = await getOrCreateBrowser()
+  const { browser, page } = await getOrCreateBrowser(creds.username)
   let screenshotBase64 = ""
 
   try {

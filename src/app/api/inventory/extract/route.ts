@@ -16,9 +16,10 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
       }
 
-      // Cek apakah browser sedang dipakai task lain
-      if (isBrowserBusy()) {
-        send({ type: "error", message: "⚠️ Sistem sedang memproses task lain. Tunggu sebentar dan coba lagi." })
+      // Cek apakah browser untuk distributor ini sedang dipakai
+      // (distributor lain boleh jalan bersamaan dengan browser mereka sendiri)
+      if (username && isBrowserBusy(username)) {
+        send({ type: "error", message: "⚠️ Distributor ini sedang diproses. Tunggu sebentar dan coba lagi." })
         controller.close()
         return
       }
