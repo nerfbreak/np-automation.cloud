@@ -32,11 +32,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd ~/np-automation
-            git pull origin master
-            npm install --production=false
-            npm run build
-            pm2 restart np-web
-            pm2 restart np-worker
+            bash deploy.sh
             echo "✅ Deploy selesai: $(date '+%d/%m/%Y %H:%M:%S')"
 
       - name: Notify Telegram - Deploy Success
