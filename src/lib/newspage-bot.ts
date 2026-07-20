@@ -135,7 +135,13 @@ export async function closeBrowser(username: string, force = false): Promise<voi
     await instance.browser.close()
     console.log(`[Browser:${username}] Closed. RAM freed.`)
   } catch (e) {
-    console.error(`[Browser:${username}] Failed to close:`, e)
+    console.error(`[Browser:${username}] Failed to close gracefully:`, e)
+  } finally {
+    // Force-kill semua child process Chromium (gpu-process, renderer, dll)
+    // kalau browser.close() tidak cascade dengan benar
+    try {
+      instance.browser.process()?.kill('SIGKILL')
+    } catch { /* already dead */ }
   }
   pool.delete(username)
   console.log(`[Browser:${username}] Removed from pool. Active: ${pool.size}/${MAX_CONCURRENT_BROWSERS}`)
