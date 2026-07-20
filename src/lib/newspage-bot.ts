@@ -178,13 +178,15 @@ async function findFrame(page: Page, selectorOrId: string): Promise<Frame> {
   for (const frame of page.frames()) {
     const found = await frame.evaluate(
       (sel) => {
-        const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
-        if (!isSel) return !!document.getElementById(sel);
-        const els = document.querySelectorAll(sel);
+        let cssSel = sel;
+        if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
+          cssSel = `[id='${sel}']`;
+        }
+        const els = document.querySelectorAll(cssSel);
         for (let i = els.length - 1; i >= 0; i--) {
           if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) return true;
         }
-        return els.length > 0;
+        return false;
       },
       selectorOrId
     ).catch(() => false)
@@ -198,15 +200,14 @@ async function jsClick(page: Page, selectorOrId: string): Promise<void> {
   await waitForElement(page, selectorOrId) // Tunggu elemen muncul dulu (penting di VPS yang lebih lambat)
   const frame = await findFrame(page, selectorOrId)
   await frame.evaluate((sel) => {
-    const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+    let cssSel = sel;
+    if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
+      cssSel = `[id='${sel}']`;
+    }
     let el: Element | null = null;
-    if (!isSel) el = document.getElementById(sel);
-    else {
-      const els = document.querySelectorAll(sel);
-      for (let i = els.length - 1; i >= 0; i--) {
-        if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i]; break; }
-      }
-      if (!el && els.length > 0) el = els[els.length - 1];
+    const els = document.querySelectorAll(cssSel);
+    for (let i = els.length - 1; i >= 0; i--) {
+      if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i]; break; }
     }
     if (el && el instanceof HTMLElement) {
       el.focus() // Wajib untuk WebForms: set SYS_activeElementId
@@ -221,15 +222,14 @@ async function jsClick(page: Page, selectorOrId: string): Promise<void> {
 async function jsSelect(page: Page, selectorOrId: string, value: string): Promise<void> {
   const frame = await findFrame(page, selectorOrId)
   await frame.evaluate(({ sel, val }) => {
-    const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+    let cssSel = sel;
+    if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
+      cssSel = `[id='${sel}']`;
+    }
     let el: HTMLSelectElement | null = null;
-    if (!isSel) el = document.getElementById(sel) as HTMLSelectElement | null;
-    else {
-      const els = document.querySelectorAll(sel);
-      for (let i = els.length - 1; i >= 0; i--) {
-        if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLSelectElement; break; }
-      }
-      if (!el && els.length > 0) el = els[els.length - 1] as HTMLSelectElement;
+    const els = document.querySelectorAll(cssSel);
+    for (let i = els.length - 1; i >= 0; i--) {
+      if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLSelectElement; break; }
     }
     if (!el) throw new Error(`${sel} disappeared`)
     el.value = val
@@ -241,15 +241,14 @@ async function jsSelect(page: Page, selectorOrId: string, value: string): Promis
 async function jsFill(page: Page, selectorOrId: string, value: string): Promise<void> {
   const frame = await findFrame(page, selectorOrId)
   await frame.evaluate(({ sel, val }) => {
-    const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+    let cssSel = sel;
+    if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
+      cssSel = `[id='${sel}']`;
+    }
     let el: HTMLInputElement | null = null;
-    if (!isSel) el = document.getElementById(sel) as HTMLInputElement | null;
-    else {
-      const els = document.querySelectorAll(sel);
-      for (let i = els.length - 1; i >= 0; i--) {
-        if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLInputElement; break; }
-      }
-      if (!el && els.length > 0) el = els[els.length - 1] as HTMLInputElement;
+    const els = document.querySelectorAll(cssSel);
+    for (let i = els.length - 1; i >= 0; i--) {
+      if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLInputElement; break; }
     }
     if (!el) throw new Error(`${sel} disappeared`)
     const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
@@ -263,16 +262,16 @@ async function jsFill(page: Page, selectorOrId: string, value: string): Promise<
 async function jsCheck(page: Page, selectorOrId: string): Promise<void> {
   const frame = await findFrame(page, selectorOrId)
   await frame.evaluate((sel) => {
-    const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
-    let el: HTMLInputElement | null = null;
-    if (!isSel) el = document.getElementById(sel) as HTMLInputElement | null;
-    else {
-      const els = document.querySelectorAll(sel);
-      for (let i = els.length - 1; i >= 0; i--) {
-        if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLInputElement; break; }
-      }
-      if (!el && els.length > 0) el = els[els.length - 1] as HTMLInputElement;
+    let cssSel = sel;
+    if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
+      cssSel = `[id='${sel}']`;
     }
+    let el: HTMLInputElement | null = null;
+    const els = document.querySelectorAll(cssSel);
+    for (let i = els.length - 1; i >= 0; i--) {
+      if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLInputElement; break; }
+    }
+    if (!el) throw new Error(`${sel} disappeared`);
     if (!el.checked) {
       el.checked = true
       el.dispatchEvent(new Event("change", { bubbles: true }))
@@ -498,14 +497,16 @@ export async function extractNewspageStock(
     await jsClick(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_SelectButton")
     await smartWait(page)
 
-    await waitForElement(page, "[id$='_FilterField_Value']", 20000)
-    await jsFill(page, "[id$='_FilterField_Value']", "E_20150315090000028")
-    await jsClick(page, "[id$='SearchForm_ButtonSearch_Value']")
+    // Gunakan [id^='pop_Dynamic_'] untuk memastikan kita hanya berinteraksi dengan elemen di dalam popup,
+    // bukan elemen serupa yang kebetulan terlihat di background main frame.
+    await waitForElement(page, "[id^='pop_Dynamic_'][id$='_FilterField_Value']", 20000)
+    await jsFill(page, "[id^='pop_Dynamic_'][id$='_FilterField_Value']", "E_20150315090000028")
+    await jsClick(page, "[id^='pop_Dynamic_'][id$='SearchForm_ButtonSearch_Value']")
     await smartWait(page)
 
     onProgress({ type: "log", message: "Memilih modul E_20150315090000028..." })
-    await waitForElement(page, "[id$='_DynCol_INTF_ID_Value']")
-    await jsClick(page, "[id$='_DynCol_INTF_ID_Value']")
+    await waitForElement(page, "[id^='pop_Dynamic_'][id$='_DynCol_INTF_ID_Value']")
+    await jsClick(page, "[id^='pop_Dynamic_'][id$='_DynCol_INTF_ID_Value']")
     await smartWait(page)
 
 
