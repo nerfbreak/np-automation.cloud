@@ -178,8 +178,13 @@ async function findFrame(page: Page, selectorOrId: string): Promise<Frame> {
   for (const frame of page.frames()) {
     const found = await frame.evaluate(
       (sel) => {
-        const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
-        return !!(isSelector ? document.querySelector(sel) : document.getElementById(sel));
+        const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+        if (!isSel) return !!document.getElementById(sel);
+        const els = document.querySelectorAll(sel);
+        for (let i = els.length - 1; i >= 0; i--) {
+          if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) return true;
+        }
+        return els.length > 0;
       },
       selectorOrId
     ).catch(() => false)
@@ -193,8 +198,16 @@ async function jsClick(page: Page, selectorOrId: string): Promise<void> {
   await waitForElement(page, selectorOrId) // Tunggu elemen muncul dulu (penting di VPS yang lebih lambat)
   const frame = await findFrame(page, selectorOrId)
   await frame.evaluate((sel) => {
-    const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
-    const el = isSelector ? document.querySelector(sel) : document.getElementById(sel);
+    const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+    let el: Element | null = null;
+    if (!isSel) el = document.getElementById(sel);
+    else {
+      const els = document.querySelectorAll(sel);
+      for (let i = els.length - 1; i >= 0; i--) {
+        if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i]; break; }
+      }
+      if (!el && els.length > 0) el = els[els.length - 1];
+    }
     if (el && el instanceof HTMLElement) {
       el.focus() // Wajib untuk WebForms: set SYS_activeElementId
       el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) // Eksekusi appendDelayCall() kalau ada di onmousedown
@@ -208,8 +221,16 @@ async function jsClick(page: Page, selectorOrId: string): Promise<void> {
 async function jsSelect(page: Page, selectorOrId: string, value: string): Promise<void> {
   const frame = await findFrame(page, selectorOrId)
   await frame.evaluate(({ sel, val }) => {
-    const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
-    const el = (isSelector ? document.querySelector(sel) : document.getElementById(sel)) as HTMLSelectElement | null;
+    const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+    let el: HTMLSelectElement | null = null;
+    if (!isSel) el = document.getElementById(sel) as HTMLSelectElement | null;
+    else {
+      const els = document.querySelectorAll(sel);
+      for (let i = els.length - 1; i >= 0; i--) {
+        if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLSelectElement; break; }
+      }
+      if (!el && els.length > 0) el = els[els.length - 1] as HTMLSelectElement;
+    }
     if (!el) throw new Error(`${sel} disappeared`)
     el.value = val
     el.dispatchEvent(new Event("change", { bubbles: true }))
@@ -220,8 +241,16 @@ async function jsSelect(page: Page, selectorOrId: string, value: string): Promis
 async function jsFill(page: Page, selectorOrId: string, value: string): Promise<void> {
   const frame = await findFrame(page, selectorOrId)
   await frame.evaluate(({ sel, val }) => {
-    const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
-    const el = (isSelector ? document.querySelector(sel) : document.getElementById(sel)) as HTMLInputElement | null;
+    const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+    let el: HTMLInputElement | null = null;
+    if (!isSel) el = document.getElementById(sel) as HTMLInputElement | null;
+    else {
+      const els = document.querySelectorAll(sel);
+      for (let i = els.length - 1; i >= 0; i--) {
+        if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLInputElement; break; }
+      }
+      if (!el && els.length > 0) el = els[els.length - 1] as HTMLInputElement;
+    }
     if (!el) throw new Error(`${sel} disappeared`)
     const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
     nativeSetter?.call(el, val)
@@ -234,9 +263,16 @@ async function jsFill(page: Page, selectorOrId: string, value: string): Promise<
 async function jsCheck(page: Page, selectorOrId: string): Promise<void> {
   const frame = await findFrame(page, selectorOrId)
   await frame.evaluate((sel) => {
-    const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
-    const el = (isSelector ? document.querySelector(sel) : document.getElementById(sel)) as HTMLInputElement | null;
-    if (!el) throw new Error(`${sel} disappeared`)
+    const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+    let el: HTMLInputElement | null = null;
+    if (!isSel) el = document.getElementById(sel) as HTMLInputElement | null;
+    else {
+      const els = document.querySelectorAll(sel);
+      for (let i = els.length - 1; i >= 0; i--) {
+        if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLInputElement; break; }
+      }
+      if (!el && els.length > 0) el = els[els.length - 1] as HTMLInputElement;
+    }
     if (!el.checked) {
       el.checked = true
       el.dispatchEvent(new Event("change", { bubbles: true }))
@@ -298,8 +334,13 @@ async function waitForElement(page: Page, selectorOrId: string, timeoutMs = TIME
   while (Date.now() - start < timeoutMs) {
     for (const frame of page.frames()) {
       const found = await frame.evaluate((sel) => {
-        const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
-        return !!(isSelector ? document.querySelector(sel) : document.getElementById(sel));
+        const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+        if (!isSel) return !!document.getElementById(sel);
+        const els = document.querySelectorAll(sel);
+        for (let i = els.length - 1; i >= 0; i--) {
+          if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) return true;
+        }
+        return els.length > 0;
       }, selectorOrId).catch(() => false)
       if (found) return
     }
