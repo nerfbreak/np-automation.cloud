@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { useInventoryStore } from "@/store/inventory-store"
 import { AppShell } from "@/components/layout/app-shell"
 import { Button } from "@/components/ui/button"
@@ -70,7 +70,6 @@ export default function InventoryAdjustmentPage() {
     botError, setBotError,
     rawCsvContent, setRawCsvContent,
     
-    distributorColumns, setDistributorColumns,
     distributorColumns, setDistributorColumns,
     distributorRawData, setDistributorRawData
   } = useInventoryStore()
