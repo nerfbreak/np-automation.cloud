@@ -16,9 +16,12 @@ interface StepperProps {
 
 export function Stepper({ steps, currentStep, className }: StepperProps) {
   return (
-    <div className={cn("flex items-center w-full pb-8", className)}>
+    <div 
+      className={cn("flex items-center w-full pb-8 overflow-x-auto", className)}
+      style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+    >
       {steps.map((step, index) => (
-        <div key={step.id} className="flex items-center flex-1 last:flex-none">
+        <div key={step.id} className="flex items-center flex-1 last:flex-none min-w-[120px] md:min-w-0">
           <div className="relative flex items-center justify-center">
             <div
               className={cn(
