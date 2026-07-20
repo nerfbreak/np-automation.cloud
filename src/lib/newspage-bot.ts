@@ -1,0 +1,622 @@
+import { chromium, Browser, Page, BrowserContext, Frame } from "playwright"
+import * as path from "path"
+import * as fs from "fs/promises"
+import * as os from "os"
+
+// ── Config ────────────────────────────────────────────────────────────────────
+const NEWSPAGE_URL = process.env.NEWSPAGE_URL!
+const HEADLESS = true // toggle via PLAYWRIGHT_HEADLESS env when stable
+const TIMEOUT = parseInt(process.env.PLAYWRIGHT_TIMEOUT_MS ?? "60000")
+
+export interface Credentials {
+  username: string
+  password: string
+}
+
+export type ProgressCallback = (event: BotProgressEvent) => void
+
+export interface BotProgressEvent {
+  type: "log" | "progress" | "error" | "done" | "screenshot" | "result"
+  message?: string
+  sku?: string
+  status?: "running" | "done" | "error"
+  index?: number
+  total?: number
+  screenshotBase64?: string
+  data?: ExtractedStockRow[]
+  rawCsv?: string
+}
+
+export interface AdjustmentRow {
+  sku: string
+  productName: string
+  qty: number
+}
+
+export interface ExtractedStockRow {
+  sku: string
+  productName: string
+  qty: number
+}
+
+// ── Browser Singleton ───────────────────────────────────────────────────────────
+const globalAny: any = globalThis
+
+async function getOrCreateBrowser(): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
+  // Cek kalau udah ada di memory (karena sekarang Next.js dan Worker jalan di proses yang sama)
+  if (globalAny.activePage && globalAny.activeBrowser && globalAny.activeBrowser.isConnected() && !globalAny.activePage.isClosed()) {
+    return { browser: globalAny.activeBrowser, context: globalAny.activeContext, page: globalAny.activePage }
+  }
+
+  // Kalau belum ada browser sama sekali, buka baru
+  globalAny.activeBrowser = await chromium.launch({
+      headless: true, // Berjalan secara background
+      args: [
+        "--remote-allow-origins=*",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--window-size=1280,720",
+      ],
+    })
+    
+    globalAny.activeContext = await globalAny.activeBrowser.newContext({
+      viewport: { width: 1920, height: 1080 },
+      acceptDownloads: true,
+    })
+    globalAny.activePage = await globalAny.activeContext.newPage()
+    globalAny.activePage.setDefaultTimeout(TIMEOUT)
+    globalAny.activePage.setDefaultNavigationTimeout(TIMEOUT)
+    
+    return { browser: globalAny.activeBrowser, context: globalAny.activeContext, page: globalAny.activePage }
+}
+
+export async function closeBrowser(): Promise<void> {
+  if (globalAny.activeBrowser) {
+    try {
+      if (globalAny.activePage) {
+        await globalAny.activePage.close().catch(() => {})
+      }
+      if (globalAny.activeContext) {
+        await globalAny.activeContext.close().catch(() => {})
+      }
+      await globalAny.activeBrowser.close()
+    } catch (e) {
+      console.error("Failed to close browser:", e)
+    }
+    globalAny.activeBrowser = null
+    globalAny.activeContext = null
+    globalAny.activePage = null
+  }
+}
+
+/**
+ * findFrame — search all frames (main + iframes) for an element by ID.
+ * Newspage loads its content in nested iframes.
+ */
+async function findFrame(page: Page, id: string): Promise<Frame> {
+  for (const frame of page.frames()) {
+    const found = await frame.evaluate(
+      (elId) => !!document.getElementById(elId),
+      id
+    ).catch(() => false)
+    if (found) return frame
+  }
+  throw new Error(`Element not found in any frame: #${id}`)
+}
+
+/** jsClick — fire click via native browser events (focus, mousedown, click) to ensure all WebForms handlers execute */
+async function jsClick(page: Page, id: string): Promise<void> {
+  const frame = await findFrame(page, id)
+  await frame.evaluate((elId) => {
+    const el = document.getElementById(elId)
+    if (el) {
+      el.focus() // Wajib untuk WebForms: set SYS_activeElementId
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) // Eksekusi appendDelayCall() kalau ada di onmousedown
+      el.click() // Eksekusi postback
+    }
+    else throw new Error(`Element #${elId} disappeared before click`)
+  }, id)
+}
+
+/** jsSelect — set select value + dispatch change, searches all frames */
+async function jsSelect(page: Page, id: string, value: string): Promise<void> {
+  const frame = await findFrame(page, id)
+  await frame.evaluate(({ elId, val }) => {
+    const el = document.getElementById(elId) as HTMLSelectElement | null
+    if (!el) throw new Error(`#${elId} disappeared`)
+    el.value = val
+    el.dispatchEvent(new Event("change", { bubbles: true }))
+  }, { elId: id, val: value })
+}
+
+/** jsFill — set input value + dispatch events, searches all frames */
+async function jsFill(page: Page, id: string, value: string): Promise<void> {
+  const frame = await findFrame(page, id)
+  await frame.evaluate(({ elId, val }) => {
+    const el = document.getElementById(elId) as HTMLInputElement | null
+    if (!el) throw new Error(`#${elId} disappeared`)
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
+    nativeSetter?.call(el, val)
+    el.dispatchEvent(new Event("input", { bubbles: true }))
+    el.dispatchEvent(new Event("change", { bubbles: true }))
+  }, { elId: id, val: value })
+}
+
+/** jsCheck — check a checkbox via JS, searches all frames */
+async function jsCheck(page: Page, id: string): Promise<void> {
+  const frame = await findFrame(page, id)
+  await frame.evaluate((elId) => {
+    const el = document.getElementById(elId) as HTMLInputElement | null
+    if (!el) throw new Error(`#${elId} disappeared`)
+    if (!el.checked) {
+      el.checked = true
+      el.dispatchEvent(new Event("change", { bubbles: true }))
+    }
+  }, id)
+}
+
+/** 
+ * Smart wait khusus untuk portal ASP.NET legacy: 
+ * Menunggu network idle, load state, dan memberi jeda ekstra untuk memastikan UpdatePanel selesai me-render DOM.
+ */
+async function smartWait(page: Page, extraDelay = 2500) {
+  await page.waitForLoadState("domcontentloaded").catch(() => {})
+  await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {})
+  // Delay fisik karena JavaScript UpdatePanel (UpdateProgress) butuh waktu untuk me-replace DOM setelah request selesai
+  await page.waitForTimeout(extraDelay)
+}
+
+/** waitForElement — poll all frames until element appears, with timeout */
+async function waitForElement(page: Page, id: string, timeoutMs = TIMEOUT): Promise<void> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    for (const frame of page.frames()) {
+      const found = await frame.evaluate((elId) => !!document.getElementById(elId), id).catch(() => false)
+      if (found) return
+    }
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  throw new Error(`Timeout waiting for #${id}`)
+}
+
+/** debugScreenshot — capture and send current page state as log */
+async function debugScreenshot(page: Page, onProgress: ProgressCallback): Promise<void> {
+  const buf = await page.screenshot({ fullPage: false })
+  onProgress({ type: "screenshot", screenshotBase64: buf.toString("base64"), message: "Debug screenshot" })
+}
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+async function login(page: Page, creds: Credentials, onProgress: ProgressCallback): Promise<void> {
+  // Check if we are already logged in (singleton browser session)
+  const currentUrl = page.url()
+  if (currentUrl && currentUrl.includes(NEWSPAGE_URL.split("/")[2]) && !currentUrl.includes("Logon.aspx") && !currentUrl.includes("about:blank")) {
+    onProgress({ type: "log", message: "Sesi browser masih aktif, melanjutkan tanpa login ulang..." })
+    return
+  }
+
+  onProgress({ type: "log", message: "Membuka portal Newspage..." })
+  await page.goto(NEWSPAGE_URL, { waitUntil: "domcontentloaded" })
+
+  onProgress({ type: "log", message: "Mengisi kredensial..." })
+  const finalUsername = creds.username.startsWith("NPSYS") ? creds.username : "NPSYS" + creds.username
+  await page.fill("#txtUserid", finalUsername)
+  await page.fill("#txtPasswd", creds.password)
+  await page.click("#btnLogin")
+
+  try {
+    await page.waitForSelector("#SYS_ASCX_btnContinue", { timeout: 5000 })
+    onProgress({ type: "log", message: "Sesi aktif terdeteksi — bypass..." })
+    await jsClick(page, "SYS_ASCX_btnContinue")
+    await smartWait(page)
+  } catch { /* no popup */ }
+
+  onProgress({ type: "log", message: "Login berhasil." })
+}
+
+// ── Logout ────────────────────────────────────────────────────────────────────
+async function logout(page: Page, onProgress: ProgressCallback): Promise<void> {
+  try {
+    await jsClick(page, "btnLogout")
+    await smartWait(page)
+    onProgress({ type: "log", message: "Logout berhasil." })
+  } catch { /* ignore */ }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// EXTRACT — Auto Compare Mode
+// ═════════════════════════════════════════════════════════════════════════════
+export async function extractNewspageStock(
+  creds: Credentials,
+  warehouseCode: string,
+  onProgress: ProgressCallback
+): Promise<{ rows: ExtractedStockRow[], rawCsv: string }> {
+  const { browser, page } = await getOrCreateBrowser()
+
+  try {
+    await login(page, creds, onProgress)
+
+    // ── Step 2: Hover System Admin page ─────────────
+    const frameNavId = "ROOT_tab_Main_itm_SysAdminSetup"
+    try {
+      const frame = await findFrame(page, frameNavId)
+      await frame.locator(`#${frameNavId}`).hover() // Cukup di-hover, jangan diklik
+      await smartWait(page, 1000)
+    } catch (err) { }
+
+
+    // ── Step 3: Find and click Job menu ───────────────────────────────────
+    // Dari log, kita lihat pag_Sys_Root_tab_Detail_itm_Job langsung muncul di DOM
+    // setelah klik SysAdminSetup (sebagai sub-menu item), jadi tidak perlu cari System tab lagi.
+    onProgress({ type: "log", message: "Navigasi ke menu Job..." })
+    await waitForElement(page, "pag_Sys_Root_tab_Detail_itm_Job", TIMEOUT)
+    onProgress({ type: "log", message: "✓ Job menu ditemukan — klik..." })
+    await jsClick(page, "pag_Sys_Root_tab_Detail_itm_Job")
+    await smartWait(page, 4000) // Tunggu transisi halaman Job
+
+    // ── Step 4: Add new job ───────────────────────────────────────────────
+    onProgress({ type: "log", message: "Membuat job baru..." })
+    await waitForElement(page, "pag_FW_SYS_INTF_JOB_btn_Add_Value")
+    await jsClick(page, "pag_FW_SYS_INTF_JOB_btn_Add_Value")
+    await smartWait(page)
+
+    await waitForElement(page, "pag_FW_SYS_INTF_JOB_RootNew_btn_Next_Value")
+    await jsClick(page, "pag_FW_SYS_INTF_JOB_RootNew_btn_Next_Value")
+    await smartWait(page)
+
+    // ── Step 4: General configuration ────────────────────────────────────
+    onProgress({ type: "log", message: "Konfigurasi: Type=E, Desc, Timeout, ExeType=M..." })
+    await waitForElement(page, "pag_FW_SYS_INTF_JOB_NewGeneral_JOB_TYPE_Value")
+    await jsSelect(page, "pag_FW_SYS_INTF_JOB_NewGeneral_JOB_TYPE_Value", "E")
+    await jsFill(page, "pag_FW_SYS_INTF_JOB_NewGeneral_JOB_DESC_Value", "Inventory Export")
+    await jsFill(page, "pag_FW_SYS_INTF_JOB_NewGeneral_JOB_TIMEOUT_Value", "9999999")
+    // Tab press must go to the frame that owns the input
+    const timeoutFrame = await findFrame(page, "pag_FW_SYS_INTF_JOB_NewGeneral_JOB_TIMEOUT_Value")
+    await timeoutFrame.press("#pag_FW_SYS_INTF_JOB_NewGeneral_JOB_TIMEOUT_Value", "Tab")
+    await jsSelect(page, "pag_FW_SYS_INTF_JOB_NewGeneral_EXE_TYPE_Value", "M")
+    await jsClick(page, "pag_FW_SYS_INTF_JOB_RootNew_btn_Next_Value")
+    await smartWait(page)
+
+    // ── Step 5: Disclaimer ────────────────────────────────────────────────
+    try {
+      await waitForElement(page, "pag_FW_DisclaimerMessage_btn_okay_Value", 8000)
+      onProgress({ type: "log", message: "Memeriksa disclaimer popup..." })
+      await jsClick(page, "pag_FW_DisclaimerMessage_btn_okay_Value")
+      await smartWait(page)
+    } catch { /* no disclaimer */ }
+
+    // ── Step 5: Interface search popup ───────────────────────────────────
+    onProgress({ type: "log", message: "Membuka pencarian modul ekspor..." })
+    await waitForElement(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_SelectButton")
+    await jsClick(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_SelectButton")
+    await smartWait(page)
+
+    await waitForElement(page, "pop_Dynamic_gft_List_2_FilterField_Value")
+    await jsFill(page, "pop_Dynamic_gft_List_2_FilterField_Value", "E_20150315090000028")
+    await jsClick(page, "pop_Dynamic_grd_Main_SearchForm_ButtonSearch_Value")
+    await smartWait(page)
+
+    onProgress({ type: "log", message: "Memilih modul E_20150315090000028..." })
+    await waitForElement(page, "pop_Dynamic_grd_Main_ctl02_DynCol_INTF_ID_Value")
+    await jsClick(page, "pop_Dynamic_grd_Main_ctl02_DynCol_INTF_ID_Value")
+    await smartWait(page, 4000)
+
+
+
+    // ── Step 6: File type, separator, warehouse, status ───────────────────
+    onProgress({ type: "log", message: "Konfigurasi file type, separator, warehouse, status..." })
+    
+    // File Type = D
+    const fileTypeId = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_FILE_TYPE_Value"
+    try {
+      await waitForElement(page, fileTypeId)
+      const frame = await findFrame(page, fileTypeId)
+      const ft = frame.locator(`#${fileTypeId}`)
+      const currentFt = await ft.inputValue()
+      if (currentFt !== "D") {
+        await ft.selectOption("D")
+        await smartWait(page, 2000)
+      }
+    } catch { }
+    
+    // Separator = 9 (Tab)
+    const separatorId = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_FLD_SEPARATOR_STD_Value_0"
+    try {
+      await waitForElement(page, separatorId, 5000)
+      const frame = await findFrame(page, separatorId)
+      const sep = frame.locator(`#${separatorId}`)
+      const isChecked = await sep.isChecked()
+      if (!isChecked) {
+        await sep.check()
+        await smartWait(page, 1500)
+      }
+    } catch { }
+
+    // Warehouse = GOOD_WHS
+    const wh = "GOOD_WHS"
+    const whInputId = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_grd_DynamicFilter_ctl02_dyn_Field_txt_Value"
+    try {
+      await waitForElement(page, whInputId, 5000)
+      const frame = await findFrame(page, whInputId)
+      const whLocator = frame.locator(`#${whInputId}`)
+      
+      const currentWh = await whLocator.inputValue()
+      if (currentWh !== wh) {
+        await whLocator.fill(wh)
+        await whLocator.press("Tab")
+        await smartWait(page, 1500)
+      }
+    } catch { }
+    
+    // Status = A
+    const statusId = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_grd_DynamicFilter_ctl07_dyn_Field_drp_Value"
+    try {
+      const frame = await findFrame(page, statusId)
+      const st = frame.locator(`#${statusId}`)
+      
+      const currentSt = await st.inputValue()
+      if (currentSt !== "A") {
+        await st.selectOption("A")
+        await smartWait(page, 1500)
+      }
+    } catch { }
+
+    await jsClick(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_btn_Add_Value")
+    await smartWait(page)
+
+    // ── Step 7: Save & run ────────────────────────────────────────────────
+    onProgress({ type: "log", message: "Menyimpan dan menjalankan job... (server bisa lambat)" })
+    await jsClick(page, "pag_FW_SYS_INTF_JOB_RootNew_btn_Save_Value")
+    await smartWait(page)
+
+    try {
+      await waitForElement(page, "TF_Prompt_btn_Ok_Value", 10000)
+      onProgress({ type: "log", message: "Konfirmasi popup OK..." })
+      await jsClick(page, "TF_Prompt_btn_Ok_Value")
+      await smartWait(page, 5000)
+    } catch { /* no popup */ }
+
+    onProgress({ type: "log", message: "Menunggu antrean server (status SUCCESS)..." })
+    
+    // Gunakan locator untuk menunggu tombol download tidak berstatus 'disabled'
+    // Server butuh waktu lama untuk memproses (bisa sampai 5 menit)
+    const downloadBtnId = "pag_FW_SYS_INTF_STATUS_JOB_btn_Download_Value"
+    await waitForElement(page, downloadBtnId, 300000)
+    const dFrame = await findFrame(page, downloadBtnId)
+    const downloadLocator = dFrame.locator(`#${downloadBtnId}:not([disabled])`)
+    await downloadLocator.waitFor({ state: "attached", timeout: 300000 })
+
+    onProgress({ type: "log", message: "Mendownload hasil ekstraksi..." })
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: 300000 }),
+      downloadLocator.click(),
+    ])
+
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "newspage-"))
+    const zipPath = path.join(tmpDir, "inventory.zip")
+    await download.saveAs(zipPath)
+
+    onProgress({ type: "log", message: "Mengekstrak file ZIP hasil download..." })
+    const AdmZip = (await import("adm-zip")).default
+    const zip = new AdmZip(zipPath)
+    const zipEntries = zip.getEntries()
+    
+    if (zipEntries.length === 0) {
+      throw new Error("File ZIP hasil download kosong!")
+    }
+
+    const entry = zipEntries.find(e => e.entryName.toLowerCase().endsWith(".csv") || e.entryName.toLowerCase().endsWith(".txt")) || zipEntries[0]
+    onProgress({ type: "log", message: `Membaca file dari ZIP: ${entry.entryName}` })
+    const raw = entry.getData().toString("utf8")
+
+    onProgress({ type: "log", message: "Parsing data stok..." })
+    const rows = parseInventoryCsv(raw)
+
+    onProgress({ type: "log", message: `✓ ${rows.length} produk berhasil diekstrak.` })
+    return { rows, rawCsv: raw }
+  } catch (error: any) {
+    onProgress({ type: "log", message: `Error: ${error.message}` })
+    await closeBrowser()
+    throw error
+  }
+}
+
+function parseInventoryCsv(raw: string): ExtractedStockRow[] {
+  const lines = raw.split("\n").map(l => l.trim()).filter(Boolean)
+  if (lines.length < 2) return []
+
+  let separator = ","
+  if (lines[0].includes("\t") || (lines.length > 3 && lines[3].includes("\t"))) separator = "\t"
+  else if (lines[0].includes("|") || (lines.length > 3 && lines[3].includes("|"))) separator = "|"
+  else if (lines[0].includes(";") || (lines.length > 3 && lines[3].includes(";"))) separator = ";"
+  
+  // Find the actual header row
+  let headerIdx = 0
+  let header: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const lineLower = lines[i].toLowerCase()
+    // A real header row should contain combinations of these concepts
+    const hasCode = lineLower.includes("product code") || lineLower.includes("sku") || lineLower.includes("item") || lineLower.includes("code")
+    const hasName = lineLower.includes("desc") || lineLower.includes("name") || lineLower.includes("product")
+    const hasQty = lineLower.includes("stock") || lineLower.includes("qty") || lineLower.includes("available") || lineLower.includes("balance")
+    
+    // If it has at least 2 of the 3 main columns, it's the header table
+    if ((hasCode && hasName) || (hasCode && hasQty) || (hasName && hasQty)) {
+      headerIdx = i
+      header = lines[i].split(separator).map((h) => h.trim().toLowerCase().replace(/["']/g, ""))
+      break
+    }
+  }
+
+  // If no clear header found, assume it's line 0
+  if (header.length === 0) {
+    header = lines[0].split(separator).map((h) => h.trim().toLowerCase().replace(/["']/g, ""))
+  }
+  
+  // Find column indexes based on the header (prioritize exact matches)
+  let skuIdx = header.findIndex((h) => h === "product code" || h === "product_code")
+  if (skuIdx === -1) skuIdx = header.findIndex((h) => h.includes("sku") || h.includes("item"))
+  
+  let nameIdx = header.findIndex((h) => h === "product description" || h === "product_desc")
+  if (nameIdx === -1) nameIdx = header.findIndex((h) => h.includes("desc") || h.includes("product name"))
+  
+  let qtyIdx = header.findIndex((h) => h === "stock available" || h === "stock_qty")
+  if (qtyIdx === -1) qtyIdx = header.findIndex((h) => h.includes("qty") || h === "stock balance" || h === "stock on hand")
+
+  // Parse items starting from the line after the header
+  return lines.slice(headerIdx + 1).map((line) => {
+    const cols = line.split(separator).map((c) => c.trim())
+    return {
+      sku: skuIdx >= 0 ? cols[skuIdx] : (cols[0] ?? ""), // Fallback to column 0 for SKU
+      productName: nameIdx >= 0 ? cols[nameIdx] : (cols[1] ?? ""), // Fallback to column 1 for Name
+      qty: parseInt(qtyIdx >= 0 ? (cols[qtyIdx] || "0") : (cols[2] || "0")) || 0, // Fallback to column 2 for Qty
+    }
+  }).filter((r) => r.sku && r.sku !== "EOF")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// EXECUTE — Stock Adjustment Injection
+// ═════════════════════════════════════════════════════════════════════════════
+export async function executeStockAdjustment(
+  creds: Credentials,
+  rows: AdjustmentRow[],
+  remark: string,
+  onProgress: ProgressCallback
+): Promise<string> {
+  const { browser, page } = await getOrCreateBrowser()
+  let screenshotBase64 = ""
+
+  try {
+    await login(page, creds, onProgress)
+
+    onProgress({ type: "log", message: "Membuka menu Stock Adjustment..." })
+    await jsClick(page, "pag_InventoryRoot_tab_Main_itm_StkAdj")
+    await smartWait(page)
+
+    onProgress({ type: "log", message: "Membuat dokumen Stock Adjustment baru (Add)..." })
+    await jsClick(page, "pag_I_StkAdj_btn_Add_Value")
+    await smartWait(page)
+    
+    onProgress({ type: "log", message: "Memilih Warehouse (GOOD_WHS)..." })
+    await jsClick(page, "pag_SelWhs_grd_List_ctl03_REF_PARAM_Value")
+    await smartWait(page)
+    
+    onProgress({ type: "log", message: "Memilih Reason: SA2 - Selisih Barang..." })
+    await jsSelect(page, "pag_I_StkAdj_NewGeneral_drp_n_REASON_HDR_Value", "SA2")
+    await smartWait(page)
+
+    onProgress({ type: "log", message: `Mengeksekusi ${rows.length} baris selisih...` })
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
+
+      onProgress({
+        type: "progress",
+        sku: row.sku,
+        status: "running",
+        index: i,
+        total: rows.length,
+        message: `[${i + 1}/${rows.length}] Input SKU: ${row.sku}`,
+      })
+
+      // Tunggu sampai input SKU muncul (buat jaga-jaga kalau server lambat ngerender ulang setelah tombol Add ditekan)
+      await waitForElement(page, "pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value", 20000)
+      await page.waitForTimeout(300) // Kasih napas dikit sebelum ngetik SKU
+
+      // Input SKU dengan simulasi ketikan asli (pressSequentially) supaya semua event JS di webforms ketrigger
+      const frame = await findFrame(page, "pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value")
+      const skuInput = frame.locator("#pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value")
+      await skuInput.click()
+      await skuInput.fill("") // Clear dulu
+      await skuInput.pressSequentially(row.sku, { delay: 10 })
+      await page.waitForTimeout(100) // Kasih napas setelah ngetik SKU
+      
+      // Tekan Tab
+      await skuInput.press("Tab")
+      await smartWait(page, 500) // Tunggu loading postback selesai dengan lebih cepat
+
+      // Cek apakah SKU ditolak oleh Newspage (field jadi kosong lagi)
+      // Tambahkan locator baru karena DOM mungkin ter-refresh setelah postback
+      const currentSkuVal = await frame.locator("#pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value").inputValue().catch(() => "")
+      if (!currentSkuVal || currentSkuVal.trim() === "") {
+        throw new Error(`SKU ${row.sku} ditolak oleh sistem (mungkin kode tidak valid atau hilang angka nol di depan).`)
+      }
+
+      // Tunggu sampai kolom QTY muncul (karena setelah Tab biasanya ada loading postback buat ngecek SKU)
+      await waitForElement(page, "pag_I_StkAdj_NewGeneral_txt_QTY1_Value", 20000)
+
+      // Input QTY (bisa plus atau minus, sesuai nilai 'qty' dari parameter, dikonversi jadi string)
+      await jsFill(page, "pag_I_StkAdj_NewGeneral_txt_QTY1_Value", String(row.qty))
+
+      // Input Remark (sesuai nama file tanpa extension)
+      if (remark) {
+        await jsFill(page, "pag_I_StkAdj_NewGeneral_txt_REMARK_Value", remark.substring(0, 50)).catch(() => {})
+      }
+      
+      // Klik Add Item
+      await waitForElement(page, "pag_I_StkAdj_NewGeneral_btn_Add_Value", 20000)
+      await jsClick(page, "pag_I_StkAdj_NewGeneral_btn_Add_Value")
+      await smartWait(page, 1500) // Ekstra wait biar form clear sebelum sku berikutnya
+
+      onProgress({
+        type: "progress",
+        sku: row.sku,
+        status: "done",
+        index: i,
+        total: rows.length,
+        message: `[${i + 1}/${rows.length}] ✓ ${row.sku} — ${row.qty} EA tersimpan`,
+      })
+    }
+
+    onProgress({ type: "log", message: "Menyimpan seluruh dokumen Stock Adjustment..." })
+    await jsClick(page, "pag_I_StkAdj_NewGeneral_btn_Save_Value")
+    await smartWait(page, 3000) // Tunggu delay dari appendDelayCall dan animasi pop-up
+
+    try {
+      await waitForElement(page, "pag_PopUp_YesNo_btn_Yes_Value", 10000)
+      await jsClick(page, "pag_PopUp_YesNo_btn_Yes_Value")
+      await smartWait(page, 3000) // Tunggu postback dari Yes button
+    } catch { /* no dialog */ }
+
+    onProgress({ type: "log", message: "Mencari dokumen yang baru dibuat untuk bukti..." })
+    try {
+      // 1. Kosongkan filter status biar aman
+      await jsSelect(page, "pag_I_StkAdj_drp_Status_Value", "")
+      await smartWait(page, 1000)
+      
+      // 2. Klik Search
+      await jsClick(page, "pag_I_StkAdj_grd_List_SearchForm_ButtonSearch_Value")
+      await smartWait(page, 3000)
+
+      // 3. Klik header Sort 1x (Ascending)
+      await jsClick(page, "pag_I_StkAdj_grd_List_ctl01_pag_I_StkAdj_grd_List_2_TXN_NO_SortField")
+      await smartWait(page, 3000)
+
+      // 4. Klik header Sort 2x (Descending - dokumen paling baru di atas)
+      await jsClick(page, "pag_I_StkAdj_grd_List_ctl01_pag_I_StkAdj_grd_List_2_TXN_NO_SortField")
+      await smartWait(page, 3000)
+
+      // 5. Buka dokumen paling atas (TXN NO terbaru)
+      await jsClick(page, "pag_I_StkAdj_grd_List_ctl02_grs_TXN_NO_Value")
+      await smartWait(page, 3000)
+    } catch (e: any) {
+      onProgress({ type: "log", message: "Lewati pencarian otomatis karena element tidak ditemukan: " + e.message })
+    }
+
+    onProgress({ type: "log", message: "Mengambil screenshot bukti..." })
+    const screenshotBuffer = await page.screenshot({ fullPage: true })
+    screenshotBase64 = screenshotBuffer.toString("base64")
+
+    onProgress({ type: "screenshot", screenshotBase64, message: "Screenshot bukti berhasil diambil." })
+
+    onProgress({ type: "done", message: "Eksekusi selesai." })
+    return screenshotBase64
+  } catch (e: any) {
+    onProgress({ type: "error", message: e.message || String(e) })
+    throw e
+  } finally {
+    // Selalu tutup browser di akhir proses eksekusi
+    await closeBrowser()
+  }
+}
