@@ -66,8 +66,10 @@ globalAny.inventoryWorker = new Worker(
           const fs = require('fs')
           const path = require('path')
           const screenshotsDir = path.join(process.cwd(), 'public', 'screenshots')
+          fs.mkdirSync(screenshotsDir, { recursive: true }) // Buat folder kalau belum ada
           const screenshotPath = path.join(screenshotsDir, `${job.id}.png`)
           fs.writeFileSync(screenshotPath, Buffer.from(screenshotBase64, 'base64'))
+          fs.chmodSync(screenshotPath, 0o644) // Pastikan Nginx bisa baca file
 
           // Auto-cleanup: Hapus screenshot yang umurnya lebih dari 1 jam (3600000 ms)
           try {
