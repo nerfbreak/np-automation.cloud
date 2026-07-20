@@ -6,7 +6,7 @@ import { DataTable } from "@/components/data-display/data-table";
 import { StatusBadge } from "@/components/feedback/status-badge";
 import { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow, differenceInMinutes, differenceInSeconds } from "date-fns";
-import { Download, Copy, Image as ImageIcon } from "lucide-react";
+import { Download, Copy, Image as ImageIcon, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -30,6 +30,22 @@ interface RealJob {
 
 export default function TasksPage() {
   const [jobs, setJobs] = useState<RealJob[]>([]);
+
+  const handleCancelJob = async (jobId: string) => {
+    const toastId = toast.loading("Membatalkan task...");
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
+      if (res.ok) {
+        toast.success("Task dibatalkan", { id: toastId });
+        setJobs(prev => prev.filter(j => j.job_id !== jobId));
+      } else {
+        const err = await res.json();
+        toast.error("Gagal membatalkan task", { id: toastId, description: err.error });
+      }
+    } catch (e: any) {
+      toast.error("Terjadi kesalahan", { id: toastId, description: e.message });
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -118,6 +134,29 @@ export default function TasksPage() {
         const status = row.original.status;
         const jobId = row.original.job_id;
         
+        if (status === "RUNNING" || status === "PENDING") {
+          return (
+            <TooltipProvider delay={300}>
+              <div className="flex items-center justify-end">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleCancelJob(jobId)}
+                      className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Ban className="h-3.5 w-3.5" />
+                      <span className="sr-only">Cancel Task</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Cancel Task</TooltipContent>
+                </Tooltip>
+              </div>
+            </TooltipProvider>
+          );
+        }
+
         if (status === "COMPLETED") {
           return (
             <TooltipProvider delay={300}>
