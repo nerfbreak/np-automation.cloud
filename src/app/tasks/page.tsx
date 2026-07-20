@@ -77,9 +77,9 @@ export default function TasksPage() {
       cell: ({ row }) => {
         const name = row.original.distributor_name || row.getValue("distributor_username") as string;
         return (
-          <TooltipProvider delayDuration={300}>
+          <TooltipProvider delay={300}>
             <Tooltip>
-              <TooltipTrigger asChild>
+              <TooltipTrigger>
                 <div className="font-semibold text-base truncate max-w-[200px]">
                   {name}
                 </div>
@@ -130,9 +130,9 @@ export default function TasksPage() {
       cell: ({ row }) => {
         const summary = row.getValue("result_summary") as string | null;
         return (
-          <TooltipProvider delayDuration={300}>
+          <TooltipProvider delay={300}>
             <Tooltip>
-              <TooltipTrigger asChild>
+              <TooltipTrigger>
                 <div className="text-sm max-w-[300px] truncate">
                   {summary || "-"}
                 </div>

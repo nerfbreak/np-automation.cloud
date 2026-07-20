@@ -171,77 +171,84 @@ export function isBrowserBusy(username: string): boolean {
 }
 
 /**
- * findFrame — search all frames (main + iframes) for an element by ID.
+ * findFrame — search all frames (main + iframes) for an element by ID or CSS selector.
  * Newspage loads its content in nested iframes.
  */
-async function findFrame(page: Page, id: string): Promise<Frame> {
+async function findFrame(page: Page, selectorOrId: string): Promise<Frame> {
   for (const frame of page.frames()) {
     const found = await frame.evaluate(
-      (elId) => !!document.getElementById(elId),
-      id
+      (sel) => {
+        const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+        return !!(isSelector ? document.querySelector(sel) : document.getElementById(sel));
+      },
+      selectorOrId
     ).catch(() => false)
     if (found) return frame
   }
-  throw new Error(`Element not found in any frame: #${id}`)
+  throw new Error(`Element not found in any frame: ${selectorOrId}`)
 }
 
 /** jsClick — fire click via native browser events (focus, mousedown, click) to ensure all WebForms handlers execute */
-async function jsClick(page: Page, id: string): Promise<void> {
-  await waitForElement(page, id) // Tunggu elemen muncul dulu (penting di VPS yang lebih lambat)
-  const frame = await findFrame(page, id)
-  await frame.evaluate((elId) => {
-    const el = document.getElementById(elId)
-    if (el) {
+async function jsClick(page: Page, selectorOrId: string): Promise<void> {
+  await waitForElement(page, selectorOrId) // Tunggu elemen muncul dulu (penting di VPS yang lebih lambat)
+  const frame = await findFrame(page, selectorOrId)
+  await frame.evaluate((sel) => {
+    const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+    const el = isSelector ? document.querySelector(sel) : document.getElementById(sel);
+    if (el && el instanceof HTMLElement) {
       el.focus() // Wajib untuk WebForms: set SYS_activeElementId
       el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) // Eksekusi appendDelayCall() kalau ada di onmousedown
       el.click() // Eksekusi postback
     }
-    else throw new Error(`Element #${elId} disappeared before click`)
-  }, id)
+    else throw new Error(`Element ${sel} disappeared before click`)
+  }, selectorOrId)
 }
 
 /** jsSelect — set select value + dispatch change, searches all frames */
-async function jsSelect(page: Page, id: string, value: string): Promise<void> {
-  const frame = await findFrame(page, id)
-  await frame.evaluate(({ elId, val }) => {
-    const el = document.getElementById(elId) as HTMLSelectElement | null
-    if (!el) throw new Error(`#${elId} disappeared`)
+async function jsSelect(page: Page, selectorOrId: string, value: string): Promise<void> {
+  const frame = await findFrame(page, selectorOrId)
+  await frame.evaluate(({ sel, val }) => {
+    const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+    const el = (isSelector ? document.querySelector(sel) : document.getElementById(sel)) as HTMLSelectElement | null;
+    if (!el) throw new Error(`${sel} disappeared`)
     el.value = val
     el.dispatchEvent(new Event("change", { bubbles: true }))
-  }, { elId: id, val: value })
+  }, { sel: selectorOrId, val: value })
 }
 
 /** jsFill — set input value + dispatch events, searches all frames */
-async function jsFill(page: Page, id: string, value: string): Promise<void> {
-  const frame = await findFrame(page, id)
-  await frame.evaluate(({ elId, val }) => {
-    const el = document.getElementById(elId) as HTMLInputElement | null
-    if (!el) throw new Error(`#${elId} disappeared`)
+async function jsFill(page: Page, selectorOrId: string, value: string): Promise<void> {
+  const frame = await findFrame(page, selectorOrId)
+  await frame.evaluate(({ sel, val }) => {
+    const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+    const el = (isSelector ? document.querySelector(sel) : document.getElementById(sel)) as HTMLInputElement | null;
+    if (!el) throw new Error(`${sel} disappeared`)
     const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
     nativeSetter?.call(el, val)
     el.dispatchEvent(new Event("input", { bubbles: true }))
     el.dispatchEvent(new Event("change", { bubbles: true }))
-  }, { elId: id, val: value })
+  }, { sel: selectorOrId, val: value })
 }
 
 /** jsCheck — check a checkbox via JS, searches all frames */
-async function jsCheck(page: Page, id: string): Promise<void> {
-  const frame = await findFrame(page, id)
-  await frame.evaluate((elId) => {
-    const el = document.getElementById(elId) as HTMLInputElement | null
-    if (!el) throw new Error(`#${elId} disappeared`)
+async function jsCheck(page: Page, selectorOrId: string): Promise<void> {
+  const frame = await findFrame(page, selectorOrId)
+  await frame.evaluate((sel) => {
+    const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+    const el = (isSelector ? document.querySelector(sel) : document.getElementById(sel)) as HTMLInputElement | null;
+    if (!el) throw new Error(`${sel} disappeared`)
     if (!el.checked) {
       el.checked = true
       el.dispatchEvent(new Event("change", { bubbles: true }))
     }
-  }, id)
+  }, selectorOrId)
 }
 
 /** 
  * Smart wait khusus untuk portal ASP.NET legacy: 
  * Menunggu network idle, load state, dan memberi jeda ekstra untuk memastikan UpdatePanel selesai me-render DOM.
  */
-async function smartWait(page: Page, extraDelay = 2500) {
+async function smartWait(page: Page, extraDelay = 250) {
   await page.waitForLoadState("domcontentloaded").catch(() => {})
   await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {})
   
@@ -277,16 +284,19 @@ async function smartWait(page: Page, extraDelay = 2500) {
 }
 
 /** waitForElement — poll all frames until element appears, with timeout */
-async function waitForElement(page: Page, id: string, timeoutMs = TIMEOUT): Promise<void> {
+async function waitForElement(page: Page, selectorOrId: string, timeoutMs = TIMEOUT): Promise<void> {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
     for (const frame of page.frames()) {
-      const found = await frame.evaluate((elId) => !!document.getElementById(elId), id).catch(() => false)
+      const found = await frame.evaluate((sel) => {
+        const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+        return !!(isSelector ? document.querySelector(sel) : document.getElementById(sel));
+      }, selectorOrId).catch(() => false)
       if (found) return
     }
     await new Promise((r) => setTimeout(r, 500))
   }
-  throw new Error(`Timeout waiting for #${id}`)
+  throw new Error(`Timeout waiting for element: ${selectorOrId}`)
 }
 
 /** debugScreenshot — capture and send current page state as log */
@@ -397,7 +407,7 @@ export async function extractNewspageStock(
     await waitForElement(page, "pag_Sys_Root_tab_Detail_itm_Job", TIMEOUT)
     onProgress({ type: "log", message: "✓ Job menu ditemukan — klik..." })
     await jsClick(page, "pag_Sys_Root_tab_Detail_itm_Job")
-    await smartWait(page, 4000) // Tunggu transisi halaman Job
+    await smartWait(page) // Tunggu transisi halaman Job
 
     // ── Step 4: Add new job ───────────────────────────────────────────────
     onProgress({ type: "log", message: "Membuat job baru..." })
@@ -442,9 +452,9 @@ export async function extractNewspageStock(
     await smartWait(page)
 
     onProgress({ type: "log", message: "Memilih modul E_20150315090000028..." })
-    await waitForElement(page, "pop_Dynamic_grd_Main_ctl02_DynCol_INTF_ID_Value")
-    await jsClick(page, "pop_Dynamic_grd_Main_ctl02_DynCol_INTF_ID_Value")
-    await smartWait(page, 4000)
+    await waitForElement(page, "[id$='_DynCol_INTF_ID_Value']")
+    await jsClick(page, "[id$='_DynCol_INTF_ID_Value']")
+    await smartWait(page)
 
 
 
@@ -479,7 +489,7 @@ export async function extractNewspageStock(
 
     // Warehouse = GOOD_WHS
     const wh = "GOOD_WHS"
-    const whInputId = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_grd_DynamicFilter_ctl02_dyn_Field_txt_Value"
+    const whInputId = "[id$='_ctl02_dyn_Field_txt_Value']"
     try {
       await waitForElement(page, whInputId, 5000)
       const frame = await findFrame(page, whInputId)
@@ -494,7 +504,7 @@ export async function extractNewspageStock(
     } catch { }
     
     // Status = A
-    const statusId = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_grd_DynamicFilter_ctl07_dyn_Field_drp_Value"
+    const statusId = "[id$='_ctl07_dyn_Field_drp_Value']"
     try {
       const frame = await findFrame(page, statusId)
       const st = frame.locator(`#${statusId}`)
@@ -518,7 +528,7 @@ export async function extractNewspageStock(
       await waitForElement(page, "TF_Prompt_btn_Ok_Value", 10000)
       onProgress({ type: "log", message: "Konfirmasi popup OK..." })
       await jsClick(page, "TF_Prompt_btn_Ok_Value")
-      await smartWait(page, 5000)
+      await smartWait(page, 1000)
     } catch { /* no popup */ }
 
     onProgress({ type: "log", message: "Menunggu antrean server (status SUCCESS)..." })
@@ -644,7 +654,7 @@ export async function executeStockAdjustment(
     await smartWait(page)
     
     onProgress({ type: "log", message: "Memilih Warehouse (GOOD_WHS)..." })
-    await jsClick(page, "pag_SelWhs_grd_List_ctl03_REF_PARAM_Value")
+    await jsClick(page, "[id$='_ctl03_REF_PARAM_Value']")
     await smartWait(page)
     
     onProgress({ type: "log", message: "Memilih Reason: SA2 - Selisih Barang..." })
@@ -679,7 +689,7 @@ export async function executeStockAdjustment(
       
       // Tekan Tab
       await skuInput.press("Tab")
-      await smartWait(page, 500) // Tunggu loading postback selesai dengan lebih cepat
+      await smartWait(page, 100) // Tunggu loading postback selesai dengan lebih cepat
 
       // Cek apakah SKU ditolak oleh Newspage (field jadi kosong lagi)
       // Tambahkan locator baru karena DOM mungkin ter-refresh setelah postback
@@ -702,7 +712,7 @@ export async function executeStockAdjustment(
       // Klik Add Item
       await waitForElement(page, "pag_I_StkAdj_NewGeneral_btn_Add_Value", 20000)
       await jsClick(page, "pag_I_StkAdj_NewGeneral_btn_Add_Value")
-      await smartWait(page, 1500) // Ekstra wait biar form clear sebelum sku berikutnya
+      await smartWait(page, 200) // Ekstra wait biar form clear sebelum sku berikutnya
 
       onProgress({
         type: "progress",
@@ -725,7 +735,7 @@ export async function executeStockAdjustment(
       await jsClick(page, "pag_PopUp_YesNo_btn_Yes_Value")
       
       onProgress({ type: "log", message: "Menyimpan ke database (bisa agak lama)..." })
-      await smartWait(page, 5000)
+      await smartWait(page, 1000)
     } catch (err: any) { 
       onProgress({ type: "log", message: "Popup konfirmasi tidak muncul atau gagal diklik: " + err.message })
     }
@@ -744,19 +754,19 @@ export async function executeStockAdjustment(
       
       // 2. Klik Search
       await jsClick(page, "pag_I_StkAdj_grd_List_SearchForm_ButtonSearch_Value")
-      await smartWait(page, 3000)
+      await smartWait(page)
 
       // 3. Klik header Sort 1x (Ascending)
-      await jsClick(page, "pag_I_StkAdj_grd_List_ctl01_pag_I_StkAdj_grd_List_2_TXN_NO_SortField")
-      await smartWait(page, 3000)
+      await jsClick(page, "[id$='_TXN_NO_SortField']")
+      await smartWait(page)
 
       // 4. Klik header Sort 2x (Descending - dokumen paling baru di atas)
-      await jsClick(page, "pag_I_StkAdj_grd_List_ctl01_pag_I_StkAdj_grd_List_2_TXN_NO_SortField")
-      await smartWait(page, 3000)
+      await jsClick(page, "[id$='_TXN_NO_SortField']")
+      await smartWait(page)
 
       // 5. Buka dokumen paling atas (TXN NO terbaru)
-      await jsClick(page, "pag_I_StkAdj_grd_List_ctl02_grs_TXN_NO_Value")
-      await smartWait(page, 3000)
+      await jsClick(page, "[id$='_ctl02_grs_TXN_NO_Value']")
+      await smartWait(page)
     } catch (e: any) {
       onProgress({ type: "log", message: "Lewati pencarian otomatis karena element tidak ditemukan: " + e.message })
     }
