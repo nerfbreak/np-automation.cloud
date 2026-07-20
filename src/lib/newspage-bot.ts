@@ -108,6 +108,7 @@ async function findFrame(page: Page, id: string): Promise<Frame> {
 
 /** jsClick — fire click via native browser events (focus, mousedown, click) to ensure all WebForms handlers execute */
 async function jsClick(page: Page, id: string): Promise<void> {
+  await waitForElement(page, id) // Tunggu elemen muncul dulu (penting di VPS yang lebih lambat)
   const frame = await findFrame(page, id)
   await frame.evaluate((elId) => {
     const el = document.getElementById(elId)
