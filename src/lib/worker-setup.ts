@@ -150,8 +150,8 @@ globalAny.inventoryWorker = new Worker(
         return { success: true }
       } catch (error: any) {
         console.error(`[Job ${job.id}] Failed:`, error.message)
-        // Kill browser juga saat error agar tidak ada zombie browser di VPS
-        await closeBrowser().catch(() => {})
+        // Force close browser saat error — buang session stale agar job berikutnya fresh
+        await closeBrowser(true).catch(() => {})
         await supabaseAdmin
           .from('jobs')
           .update({ 

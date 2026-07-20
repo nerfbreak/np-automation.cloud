@@ -74,12 +74,18 @@ async function getOrCreateBrowser(): Promise<{ browser: Browser; context: Browse
     return { browser: globalAny.activeBrowser, context: globalAny.activeContext, page: globalAny.activePage }
 }
 
-export async function closeBrowser(): Promise<void> {
-  // Kurangi ref count — hanya tutup browser kalau tidak ada yang pakai
-  globalAny.browserRefCount = Math.max(0, (globalAny.browserRefCount || 0) - 1)
-  if (globalAny.browserRefCount > 0) {
-    console.log(`[Browser] masih dipakai (ref: ${globalAny.browserRefCount}), skip close.`)
-    return
+export async function closeBrowser(force = false): Promise<void> {
+  if (!force) {
+    // Kurangi ref count — hanya tutup browser kalau tidak ada yang pakai
+    globalAny.browserRefCount = Math.max(0, (globalAny.browserRefCount || 0) - 1)
+    if (globalAny.browserRefCount > 0) {
+      console.log(`[Browser] masih dipakai (ref: ${globalAny.browserRefCount}), skip close.`)
+      return
+    }
+  } else {
+    // Force close: reset refCount, buang session stale
+    console.log(`[Browser] Force close! Session stale di-reset.`)
+    globalAny.browserRefCount = 0
   }
 
   if (globalAny.activeBrowser) {
