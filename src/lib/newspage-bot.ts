@@ -249,6 +249,10 @@ async function jsCheck(page: Page, selectorOrId: string): Promise<void> {
  * Menunggu network idle, load state, dan memberi jeda ekstra untuk memastikan UpdatePanel selesai me-render DOM.
  */
 async function smartWait(page: Page, extraDelay = 250) {
+  // Tunggu sejenak memberi waktu bagi JS onclick handlers untuk nge-trigger 
+  // XMLHttpRequest/UpdatePanel postback sebelum kita nge-cek statusnya.
+  await page.waitForTimeout(500)
+  
   await page.waitForLoadState("domcontentloaded").catch(() => {})
   await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {})
   
