@@ -9,6 +9,8 @@ jobs:
   deploy:
     name: Deploy NP Automation
     runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Jakarta
 
     steps:
       - name: Checkout code
@@ -19,7 +21,7 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d parse_mode="Markdown" \
-            -d text="🚀 *Deploy Dimulai*%0A%0A📦 Repo: \`${{ github.repository }}\`%0A🌿 Branch: \`${{ github.ref_name }}\`%0A💬 Commit: \`${{ github.event.head_commit.message }}\`%0A👤 By: ${{ github.actor }}%0A⏰ $(date '+%d/%m/%Y %H:%M')"
+            -d text="🚀 *Deploy Dimulai*%0A%0A📦 Repo: \`${{ github.repository }}\`%0A🌿 Branch: \`${{ github.ref_name }}\`%0A💬 Commit: \`${{ github.event.head_commit.message }}\`%0A👤 By: ${{ github.actor }}%0A⏰ $(date '+%d/%m/%Y %H:%M') WIB"
 
       - name: Deploy via SSH
         id: deploy
@@ -43,7 +45,7 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d parse_mode="Markdown" \
-            -d text="✅ *Deploy Berhasil!*%0A%0A📦 Repo: \`${{ github.repository }}\`%0A🌿 Branch: \`${{ github.ref_name }}\`%0A💬 Commit: \`${{ github.event.head_commit.message }}\`%0A⏰ $(date '+%d/%m/%Y %H:%M')%0A%0A🌐 https://np-automation.cloud"
+            -d text="✅ *Deploy Berhasil!*%0A%0A📦 Repo: \`${{ github.repository }}\`%0A🌿 Branch: \`${{ github.ref_name }}\`%0A💬 Commit: \`${{ github.event.head_commit.message }}\`%0A⏰ $(date '+%d/%m/%Y %H:%M') WIB%0A%0A🌐 https://np-automation.cloud"
 
       - name: Notify Telegram - Deploy Failed
         if: failure()
@@ -51,4 +53,4 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d parse_mode="Markdown" \
-            -d text="❌ *Deploy GAGAL!*%0A%0A📦 Repo: \`${{ github.repository }}\`%0A🌿 Branch: \`${{ github.ref_name }}\`%0A💬 Commit: \`${{ github.event.head_commit.message }}\`%0A⏰ $(date '+%d/%m/%Y %H:%M')%0A%0A🔍 Cek: https://github.com/${{ github.repository }}/actions"
+            -d text="❌ *Deploy GAGAL!*%0A%0A📦 Repo: \`${{ github.repository }}\`%0A🌿 Branch: \`${{ github.ref_name }}\`%0A💬 Commit: \`${{ github.event.head_commit.message }}\`%0A⏰ $(date '+%d/%m/%Y %H:%M') WIB%0A%0A🔍 Cek: https://github.com/${{ github.repository }}/actions"
