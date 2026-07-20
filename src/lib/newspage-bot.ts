@@ -377,7 +377,7 @@ async function login(page: Page, creds: Credentials, onProgress: ProgressCallbac
   const hasPopup = await page.evaluate(() => !!document.querySelector("#SYS_ASCX_btnContinue")).catch(() => false)
   if (hasPopup) {
     onProgress({ type: "log", message: "Sesi aktif terdeteksi — bypass..." })
-    await jsClick(page, "SYS_ASCX_btnContinue")
+    await page.click("#SYS_ASCX_btnContinue")
     await smartWait(page)
   }
 
