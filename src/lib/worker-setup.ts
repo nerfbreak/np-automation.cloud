@@ -54,7 +54,7 @@ globalAny.inventoryWorker = new Worker(
           }
         }
 
-        const screenshotBase64 = await executeStockAdjustment(
+        const { screenshotBase64, adjustedCount } = await executeStockAdjustment(
           { username: distributor.username, password: plainPassword },
           rows,
           remark,
@@ -90,7 +90,11 @@ globalAny.inventoryWorker = new Worker(
           }
         }
 
-        const summaryMsg = `Successfully adjusted ${rows.length} rows.`
+        // Gunakan adjustedCount (actual) bukan rows.length (input) untuk akurasi
+        const isPartial = adjustedCount < rows.length
+        const summaryMsg = isPartial
+          ? `⚠️ Partial: ${adjustedCount} dari ${rows.length} baris berhasil disesuaikan.`
+          : `Successfully adjusted ${adjustedCount} rows.`
 
         await supabaseAdmin
           .from('jobs')

@@ -573,9 +573,10 @@ export async function executeStockAdjustment(
   rows: AdjustmentRow[],
   remark: string,
   onProgress: ProgressCallback
-): Promise<string> {
+): Promise<{ screenshotBase64: string; adjustedCount: number }> {
   const { browser, page } = await getOrCreateBrowser(creds.username)
   let screenshotBase64 = ""
+  let adjustedCount = 0
 
   try {
     await login(page, creds, onProgress)
@@ -657,6 +658,7 @@ export async function executeStockAdjustment(
         total: rows.length,
         message: `[${i + 1}/${rows.length}] ✓ ${row.sku} — ${row.qty} EA tersimpan`,
       })
+      adjustedCount++
     }
 
     onProgress({ type: "log", message: "Menyimpan seluruh dokumen Stock Adjustment..." })
@@ -701,7 +703,7 @@ export async function executeStockAdjustment(
     onProgress({ type: "screenshot", screenshotBase64, message: "Screenshot bukti berhasil diambil." })
 
     onProgress({ type: "done", message: "Eksekusi selesai." })
-    return screenshotBase64
+    return { screenshotBase64, adjustedCount }
   } catch (e: any) {
     onProgress({ type: "error", message: e.message || String(e) })
     throw e
