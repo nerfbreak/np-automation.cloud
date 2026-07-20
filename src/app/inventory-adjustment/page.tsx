@@ -16,7 +16,7 @@ import { ManualGrid, ManualRow } from "@/components/inventory/manual-grid"
 import { ExecutionProgress, ExecutionItem } from "@/components/inventory/execution-progress"
 import { ResultPanel } from "@/components/inventory/result-panel"
 import { mockNewspageStock, mockDistributorStock } from "@/mocks/distributors"
-import { GitCompareArrows, ClipboardList, Loader2, Copy, Download, Timer, AlertCircle, ChevronRight } from "lucide-react"
+import { GitCompareArrows, ClipboardList, Loader2, Copy, Download, Timer, AlertCircle, ChevronRight, Ban } from "lucide-react"
 import { InlineAlert } from "@/components/feedback/inline-alert"
 import { BotProgressEvent } from "@/lib/newspage-bot"
 import { toast } from "sonner"
@@ -71,8 +71,11 @@ export default function InventoryAdjustmentPage() {
     rawCsvContent, setRawCsvContent,
     
     distributorColumns, setDistributorColumns,
+    distributorColumns, setDistributorColumns,
     distributorRawData, setDistributorRawData
   } = useInventoryStore()
+
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // Fetch distributors on mount
   useEffect(() => {
@@ -125,8 +128,15 @@ export default function InventoryAdjustmentPage() {
         })
         setMapping(newMapping)
       }
-    } catch (err) {
-      toast.error("Gagal membaca file. Pastikan formatnya CSV atau Excel (XLS/XLSX).")
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        setExtractLogs(prev => [...prev, { type: "error", message: "Proses ekstraksi dibatalkan oleh user." }])
+        setBotError("Dibatalkan")
+      } else {
+        toast.error("Gagal membaca file. Pastikan formatnya CSV atau Excel (XLS/XLSX).")
+      }
+    } finally {
+      setExtracting(false)
     }
   }
 
@@ -140,6 +150,9 @@ export default function InventoryAdjustmentPage() {
 
   // ── Real Newspage extraction via bot API ─────────────────────────────────
   const handleExtract = async () => {
+    if (abortControllerRef.current) abortControllerRef.current.abort()
+    abortControllerRef.current = new AbortController()
+    
     setExtracting(true)
     setExtractLogs([])
     setBotError("")
@@ -149,6 +162,7 @@ export default function InventoryAdjustmentPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ warehouseCode: distributor?.warehouse ?? "", username: distributor?.username ?? "" }),
+        signal: abortControllerRef.current.signal,
       })
       const reader = resp.body!.getReader()
       const decoder = new TextDecoder()
@@ -517,21 +531,39 @@ export default function InventoryAdjustmentPage() {
                         </Button>
                         {extractLogs.length > 0 && (
                           <div className="relative rounded-lg bg-black/90 text-green-400 font-mono text-xs p-4 max-h-48 overflow-y-auto space-y-1">
-                            <Tooltip>
-                              <TooltipTrigger
-                                onClick={() => {
-                                  navigator.clipboard.writeText(extractLogs.map(l => l.message).join("\n"))
-                                  toast.success("Log disalin!", { description: `${extractLogs.length} baris tersalin ke clipboard.` })
-                                }}
-                                className="absolute top-2 right-2 text-green-400/50 hover:text-green-300 transition-colors"
-                              >
-                                <Copy className="h-3.5 w-3.5" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                Copy all logs
-                              </TooltipContent>
-                            </Tooltip>
-                            {extractLogs.map((log, i) => {
+                              <div className="absolute top-2 right-2 flex items-center gap-2">
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    onClick={() => {
+                                      if (abortControllerRef.current) {
+                                        abortControllerRef.current.abort()
+                                        setExtracting(false)
+                                      }
+                                    }}
+                                    className="text-red-400/50 hover:text-red-400 transition-colors"
+                                  >
+                                    <Ban className="h-3.5 w-3.5" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Batalkan
+                                  </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(extractLogs.map(l => l.message).join("\n"))
+                                      toast.success("Log disalin!", { description: `${extractLogs.length} baris tersalin ke clipboard.` })
+                                    }}
+                                    className="text-green-400/50 hover:text-green-300 transition-colors"
+                                  >
+                                    <Copy className="h-3.5 w-3.5" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Copy all logs
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                              {extractLogs.map((log, i) => {
                               const isWaiting = log.type === "waiting"
                               const isError = log.type === "error"
                               return (

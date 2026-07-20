@@ -104,7 +104,7 @@ async function getOrCreateBrowser(
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--disable-gpu",
-      "--window-size=1280,720",
+      "--window-size=1920,1080",
     ],
   })
 
@@ -362,7 +362,7 @@ export async function extractNewspageStock(
 
     // ── Step 2: Hover System Admin page ─────────────
     // Retry sampai 3x — kalau hover ditelan diam-diam, itm_Job tidak akan muncul
-    const frameNavId = "ROOT_tab_Main_itm_SysAdminSetup"
+    const frameNavId = "[id$='_SysAdminSetup']"
     let hoverOk = false
     
     // Tunggu sampai element-nya beneran muncul di DOM (bisa lama loadnya di VPS)
@@ -374,14 +374,15 @@ export async function extractNewspageStock(
         const frame = await findFrame(page, frameNavId)
         
         // Coba Playwright native hover dulu
-        await frame.locator(`#${frameNavId}`).hover({ force: true, timeout: 5000 }).catch(async (err) => {
+        await frame.locator(frameNavId).hover({ force: true, timeout: 5000 }).catch(async (err) => {
           // Fallback ke JS Events kalau native hover ditolak/gagal
           console.warn(`Native hover gagal, mencoba JS events... Error: ${err.message}`)
-          await frame.evaluate((elId) => {
-            const el = document.getElementById(elId)
+          await frame.evaluate((sel) => {
+            const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+            const el = isSelector ? document.querySelector(sel) : document.getElementById(sel)
             if (el) {
-              el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }))
-              el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true, view: window }))
+              el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+              el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
             }
           }, frameNavId)
         })
@@ -404,9 +405,9 @@ export async function extractNewspageStock(
     // ── Step 3: Find and click Job menu ───────────────────────────────────
     // pag_Sys_Root_tab_Detail_itm_Job muncul di DOM setelah hover SysAdminSetup
     onProgress({ type: "log", message: "Navigasi ke menu Job..." })
-    await waitForElement(page, "pag_Sys_Root_tab_Detail_itm_Job", TIMEOUT)
+    await waitForElement(page, "[id$='_itm_Job']", TIMEOUT)
     onProgress({ type: "log", message: "✓ Job menu ditemukan — klik..." })
-    await jsClick(page, "pag_Sys_Root_tab_Detail_itm_Job")
+    await jsClick(page, "[id$='_itm_Job']")
     await smartWait(page) // Tunggu transisi halaman Job
 
     // ── Step 4: Add new job ───────────────────────────────────────────────
