@@ -723,7 +723,7 @@ export async function executeStockAdjustment(
     }
 
     onProgress({ type: "log", message: "Mengambil screenshot bukti..." })
-    const screenshotBuffer = await page.screenshot({ fullPage: true })
+    const screenshotBuffer = await page.screenshot({ fullPage: false })
     screenshotBase64 = screenshotBuffer.toString("base64")
 
     onProgress({ type: "screenshot", screenshotBase64, message: "Screenshot bukti berhasil diambil." })
