@@ -488,7 +488,7 @@ export async function extractNewspageStock(
     return { rows, rawCsv: raw }
   } catch (error: any) {
     onProgress({ type: "log", message: `Error: ${error.message}` })
-    await closeBrowser()
+    await closeBrowser(creds.username, true)
     throw error
   }
 }
@@ -688,6 +688,6 @@ export async function executeStockAdjustment(
     throw e
   } finally {
     // Selalu tutup browser di akhir proses eksekusi
-    await closeBrowser()
+    await closeBrowser(creds.username)
   }
 }
