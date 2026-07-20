@@ -16,12 +16,13 @@ export interface Credentials {
 export type ProgressCallback = (event: BotProgressEvent) => void
 
 export interface BotProgressEvent {
-  type: "log" | "progress" | "error" | "done" | "screenshot" | "result"
+  type: "log" | "progress" | "error" | "done" | "screenshot" | "result" | "waiting"
   message?: string
   sku?: string
   status?: "running" | "done" | "error"
   index?: number
   total?: number
+  position?: number  // posisi antrian kalau waiting
   screenshotBase64?: string
   data?: ExtractedStockRow[]
   rawCsv?: string
@@ -42,9 +43,10 @@ export interface ExtractedStockRow {
 // ── Browser Singleton ───────────────────────────────────────────────────────────
 const globalAny: any = globalThis
 
-// ─── Browser Pool ─────────────────────────────────────────────────────────────
+// ── Browser Pool ─────────────────────────────────────────────────────────────
 // Tiap distributor (username) punya browser instance sendiri.
 // Ini memungkinkan beberapa user jalan bersamaan tanpa konflik session.
+const MAX_CONCURRENT_BROWSERS = parseInt(process.env.MAX_CONCURRENT_BROWSERS || '3')
 interface BrowserInstance {
   browser: Browser
   context: BrowserContext
@@ -57,7 +59,15 @@ function getBrowserPool(): Map<string, BrowserInstance> {
   return globalAny.browserPool
 }
 
-async function getOrCreateBrowser(username: string): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
+function getWaitQueue(): Array<{ resolve: () => void }> {
+  if (!globalAny.browserWaitQueue) globalAny.browserWaitQueue = []
+  return globalAny.browserWaitQueue
+}
+
+async function getOrCreateBrowser(
+  username: string,
+  onWaiting?: (position: number) => void
+): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
   const pool = getBrowserPool()
   const existing = pool.get(username)
 
@@ -68,8 +78,16 @@ async function getOrCreateBrowser(username: string): Promise<{ browser: Browser;
     return { browser: existing.browser, context: existing.context, page: existing.page }
   }
 
+  // Kalau pool sudah penuh, masuk antrian
+  if (pool.size >= MAX_CONCURRENT_BROWSERS) {
+    const queue = getWaitQueue()
+    const position = queue.length + 1
+    console.log(`[Browser:${username}] Pool penuh (${pool.size}/${MAX_CONCURRENT_BROWSERS}), antrian #${position}`)
+    onWaiting?.(position)
+    await new Promise<void>(resolve => { queue.push({ resolve }) })
+  }
   // Buka browser baru untuk username ini
-  console.log(`[Browser:${username}] Membuka browser baru...`)
+  console.log(`[Browser:${username}] Membuka browser baru... (slot ${pool.size + 1}/${MAX_CONCURRENT_BROWSERS})`)
   const browser = await chromium.launch({
     headless: true,
     args: [
@@ -120,6 +138,15 @@ export async function closeBrowser(username: string, force = false): Promise<voi
     console.error(`[Browser:${username}] Failed to close:`, e)
   }
   pool.delete(username)
+  console.log(`[Browser:${username}] Removed from pool. Active: ${pool.size}/${MAX_CONCURRENT_BROWSERS}`)
+
+  // Notif antrian berikutnya kalau ada slot kosong
+  const queue = getWaitQueue()
+  if (queue.length > 0 && pool.size < MAX_CONCURRENT_BROWSERS) {
+    console.log(`[Browser] Slot freed, notifying queue (${queue.length} waiting)`)
+    const next = queue.shift()!
+    next.resolve()
+  }
 }
 
 /** Cek apakah browser untuk username tertentu sedang dipakai */
@@ -271,7 +298,12 @@ export async function extractNewspageStock(
   warehouseCode: string,
   onProgress: ProgressCallback
 ): Promise<{ rows: ExtractedStockRow[], rawCsv: string }> {
-  const { browser, page } = await getOrCreateBrowser(creds.username)
+  const { browser, page } = await getOrCreateBrowser(
+    creds.username,
+    (position) => {
+      onProgress({ type: "waiting", message: `⏳ Antrian #${position} — menunggu slot browser tersedia...`, position })
+    }
+  )
 
   try {
     await login(page, creds, onProgress)
