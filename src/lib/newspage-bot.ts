@@ -689,15 +689,26 @@ export async function executeStockAdjustment(
 
     onProgress({ type: "log", message: "Menyimpan seluruh dokumen Stock Adjustment..." })
     await jsClick(page, "pag_I_StkAdj_NewGeneral_btn_Save_Value")
-    await smartWait(page, 3000) // Tunggu delay dari appendDelayCall dan animasi pop-up
-
+    
+    // Server butuh waktu lama buat merespon klik Save kalau datanya ratusan baris
     try {
-      await waitForElement(page, "pag_PopUp_YesNo_btn_Yes_Value", 10000)
+      onProgress({ type: "log", message: "Menunggu popup konfirmasi Save..." })
+      await waitForElement(page, "pag_PopUp_YesNo_btn_Yes_Value", 60000) // Tunggu sampai 60 detik
       await jsClick(page, "pag_PopUp_YesNo_btn_Yes_Value")
-      await smartWait(page, 3000) // Tunggu postback dari Yes button
-    } catch { /* no dialog */ }
+      
+      onProgress({ type: "log", message: "Menyimpan ke database (bisa agak lama)..." })
+      await smartWait(page, 5000)
+    } catch (err: any) { 
+      onProgress({ type: "log", message: "Popup konfirmasi tidak muncul atau gagal diklik: " + err.message })
+    }
 
     onProgress({ type: "log", message: "Mencari dokumen yang baru dibuat untuk bukti..." })
+    
+    // Tunggu sampai beneran balik ke halaman List. Kalau nggak balik, berarti Save gagal.
+    await waitForElement(page, "pag_I_StkAdj_drp_Status_Value", 60000).catch(() => {
+      throw new Error("Gagal kembali ke halaman List setelah Save. Kemungkinan proses Save gagal atau server timeout.")
+    })
+    
     try {
       // 1. Kosongkan filter status biar aman
       await jsSelect(page, "pag_I_StkAdj_drp_Status_Value", "")
