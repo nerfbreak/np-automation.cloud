@@ -140,7 +140,7 @@ export async function closeBrowser(username: string, force = false): Promise<voi
     // Force-kill semua child process Chromium (gpu-process, renderer, dll)
     // kalau browser.close() tidak cascade dengan benar
     try {
-      instance.browser.process()?.kill('SIGKILL')
+      ;(instance.browser as any).process()?.kill('SIGKILL')
     } catch { /* already dead */ }
   }
   pool.delete(username)
