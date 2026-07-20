@@ -326,6 +326,11 @@ export async function extractNewspageStock(
     // Retry sampai 3x — kalau hover ditelan diam-diam, itm_Job tidak akan muncul
     const frameNavId = "ROOT_tab_Main_itm_SysAdminSetup"
     let hoverOk = false
+    
+    // Tunggu sampai element-nya beneran muncul di DOM (bisa lama loadnya di VPS)
+    onProgress({ type: "log", message: "Menunggu menu SysAdminSetup muncul..." })
+    await waitForElement(page, frameNavId, TIMEOUT)
+    
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const frame = await findFrame(page, frameNavId)
