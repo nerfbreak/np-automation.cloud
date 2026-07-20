@@ -244,7 +244,35 @@ async function jsCheck(page: Page, id: string): Promise<void> {
 async function smartWait(page: Page, extraDelay = 2500) {
   await page.waitForLoadState("domcontentloaded").catch(() => {})
   await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {})
-  // Delay fisik karena JavaScript UpdatePanel (UpdateProgress) butuh waktu untuk me-replace DOM setelah request selesai
+  
+  // Custom polling: Tunggu sampai semua frame bener-bener ready dan gak ada AJAX postback ASP.NET yang jalan
+  const start = Date.now()
+  while (Date.now() - start < 30000) {
+    let isBusy = false
+    for (const frame of page.frames()) {
+      const busy = await frame.evaluate(() => {
+        if (document.readyState !== 'complete') return true
+        
+        // Cek ASP.NET AJAX UpdatePanel state
+        const sys = (window as any).Sys
+        if (typeof sys !== 'undefined' && sys.WebForms && sys.WebForms.PageRequestManager) {
+          const prm = sys.WebForms.PageRequestManager.getInstance()
+          if (prm && prm.get_isInAsyncPostBack()) return true
+        }
+        return false
+      }).catch(() => false) // Kalau error (cross-origin / frame blank), anggap nggak busy
+      
+      if (busy) {
+        isBusy = true
+        break
+      }
+    }
+    
+    if (!isBusy) break
+    await new Promise(r => setTimeout(r, 500))
+  }
+
+  // Delay fisik karena JavaScript UpdatePanel (UpdateProgress) kadang butuh waktu ekstra untuk me-replace DOM setelah request selesai
   await page.waitForTimeout(extraDelay)
 }
 
