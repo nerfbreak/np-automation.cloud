@@ -46,3 +46,8 @@ add-distributor.js
 insert-rules.ts
 *.xlsx
 scripts/create-users.js
+
+# AI agent config (internal only)
+.agents/
+AGENTS.md
+CLAUDE.md
