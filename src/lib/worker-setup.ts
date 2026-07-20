@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq'
 import { connection, INVENTORY_QUEUE_NAME } from './queue'
-import { executeStockAdjustment, BotProgressEvent } from './newspage-bot'
+import { executeStockAdjustment, closeBrowser, BotProgressEvent } from './newspage-bot'
 import { supabaseAdmin } from './supabase'
 import { decrypt } from './crypto'
 
@@ -141,9 +141,15 @@ globalAny.inventoryWorker = new Worker(
           }
         }
 
+        // Kill browser setelah job selesai untuk free RAM di VPS
+        await closeBrowser()
+        console.log(`[Job ${job.id}] Browser closed.`)
+
         return { success: true }
       } catch (error: any) {
         console.error(`[Job ${job.id}] Failed:`, error.message)
+        // Kill browser juga saat error agar tidak ada zombie browser di VPS
+        await closeBrowser().catch(() => {})
         await supabaseAdmin
           .from('jobs')
           .update({ 
