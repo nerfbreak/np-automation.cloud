@@ -309,17 +309,30 @@ export async function extractNewspageStock(
     await login(page, creds, onProgress)
 
     // ── Step 2: Hover System Admin page ─────────────
+    // Retry sampai 3x — kalau hover ditelan diam-diam, itm_Job tidak akan muncul
     const frameNavId = "ROOT_tab_Main_itm_SysAdminSetup"
-    try {
-      const frame = await findFrame(page, frameNavId)
-      await frame.locator(`#${frameNavId}`).hover() // Cukup di-hover, jangan diklik
-      await smartWait(page, 1000)
-    } catch (err) { }
-
+    let hoverOk = false
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const frame = await findFrame(page, frameNavId)
+        await frame.locator(`#${frameNavId}`).hover()
+        await smartWait(page, attempt * 1000) // 1s → 2s → 3s
+        hoverOk = true
+        break
+      } catch (err) {
+        onProgress({ type: "log", message: `⚠️ Hover SysAdminSetup attempt ${attempt}/3 gagal, retry...` })
+        if (attempt === 3) {
+          // Ambil screenshot buat debug
+          const ss = await page.screenshot({ encoding: "base64", fullPage: false }).catch(() => "")
+          if (ss) onProgress({ type: "screenshot", screenshotBase64: ss as string })
+          throw new Error(`Gagal hover SysAdminSetup setelah 3x percobaan`)
+        }
+        await smartWait(page, 2000)
+      }
+    }
 
     // ── Step 3: Find and click Job menu ───────────────────────────────────
-    // Dari log, kita lihat pag_Sys_Root_tab_Detail_itm_Job langsung muncul di DOM
-    // setelah klik SysAdminSetup (sebagai sub-menu item), jadi tidak perlu cari System tab lagi.
+    // pag_Sys_Root_tab_Detail_itm_Job muncul di DOM setelah hover SysAdminSetup
     onProgress({ type: "log", message: "Navigasi ke menu Job..." })
     await waitForElement(page, "pag_Sys_Root_tab_Detail_itm_Job", TIMEOUT)
     onProgress({ type: "log", message: "✓ Job menu ditemukan — klik..." })
