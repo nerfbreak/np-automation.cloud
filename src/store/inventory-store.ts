@@ -126,5 +126,9 @@ export const useInventoryStore = create<InventoryState>((set) => ({
   setDistributorColumns: (distributorColumns) => set({ distributorColumns }),
   setDistributorRawData: (distributorRawData) => set({ distributorRawData }),
   
-  resetState: () => set(initialState)
+  resetState: () => set((state) => ({
+    ...initialState,
+    // Pertahankan distributors — tidak perlu re-fetch dari API saat mulai task baru
+    distributors: state.distributors,
+  }))
 }))
