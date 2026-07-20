@@ -77,9 +77,18 @@ export default function TasksPage() {
       cell: ({ row }) => {
         const name = row.original.distributor_name || row.getValue("distributor_username") as string;
         return (
-          <div className="font-semibold text-base" title={name}>
-            {name}
-          </div>
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="font-semibold text-base truncate max-w-[200px]">
+                  {name}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{name}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         );
       }
     },
@@ -121,9 +130,18 @@ export default function TasksPage() {
       cell: ({ row }) => {
         const summary = row.getValue("result_summary") as string | null;
         return (
-          <div className="text-sm max-w-[300px] truncate" title={summary || "-"}>
-            {summary || "-"}
-          </div>
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="text-sm max-w-[300px] truncate">
+                  {summary || "-"}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start" className="max-w-[400px]">
+                <p>{summary || "-"}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         );
       }
     },
