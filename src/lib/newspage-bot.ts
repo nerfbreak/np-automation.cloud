@@ -446,9 +446,9 @@ export async function extractNewspageStock(
     await jsClick(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_SelectButton")
     await smartWait(page)
 
-    await waitForElement(page, "pop_Dynamic_gft_List_2_FilterField_Value")
-    await jsFill(page, "pop_Dynamic_gft_List_2_FilterField_Value", "E_20150315090000028")
-    await jsClick(page, "pop_Dynamic_grd_Main_SearchForm_ButtonSearch_Value")
+    await waitForElement(page, "[id$='_FilterField_Value']", 20000)
+    await jsFill(page, "[id$='_FilterField_Value']", "E_20150315090000028")
+    await jsClick(page, "[id$='SearchForm_ButtonSearch_Value']")
     await smartWait(page)
 
     onProgress({ type: "log", message: "Memilih modul E_20150315090000028..." })
