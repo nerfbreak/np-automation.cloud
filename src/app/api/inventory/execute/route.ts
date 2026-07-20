@@ -3,7 +3,9 @@ import { inventoryQueue } from "@/lib/queue"
 import { supabaseAdmin } from "@/lib/supabase"
 import { logAudit } from "@/lib/audit"
 import { AdjustmentRow } from "@/lib/newspage-bot"
-import "@/lib/worker-setup"
+// NOTE: Worker runs as a SEPARATE process via `npm run worker`.
+// DO NOT import worker-setup here — embedding BullMQ Worker inside Next.js causes
+// duplicate job execution on multi-instance deployments and crashes on hot-reload.
 
 export async function POST(req: NextRequest) {
   const { rows, remark, distributorUsername, userId }: { 

@@ -368,7 +368,10 @@ async function login(page: Page, creds: Credentials, onProgress: ProgressCallbac
   }
 
   onProgress({ type: "log", message: "Membuka portal Newspage..." })
-  await page.goto(NEWSPAGE_URL, { waitUntil: "domcontentloaded" })
+  // BUG-04 FIX: Use networkidle instead of domcontentloaded.
+  // ASP.NET WebForms attaches event listeners AFTER domcontentloaded.
+  // Using domcontentloaded causes form fill/submit to fire before JS is ready.
+  await page.goto(NEWSPAGE_URL, { waitUntil: "networkidle" })
 
   onProgress({ type: "log", message: "Mengisi kredensial..." })
   const finalUsername = creds.username.startsWith("NPSYS") ? creds.username : "NPSYS" + creds.username
@@ -495,23 +498,18 @@ export async function extractNewspageStock(
       await smartWait(page)
     } catch { /* no disclaimer */ }
 
-    // ── Step 5: Interface search popup ───────────────────────────────────
-    onProgress({ type: "log", message: "Membuka pencarian modul ekspor..." })
-    await waitForElement(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_SelectButton")
-    await jsClick(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_SelectButton")
+    // ── Step 5: Interface ID — direct fill (BUG-05 FIX) ─────────────────
+    // INTF_ID_SelectButton popup was REMOVED from Newspage portal (2026-07-12).
+    // The correct approach is to fill INTF_ID_Value directly and press Tab
+    // to trigger the ASP.NET AutoPostBack that validates and loads the interface.
+    onProgress({ type: "log", message: "Mengisi modul ekspor E_20150315090000028..." })
+    const intfIdField = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_Value"
+    await waitForElement(page, intfIdField)
+    await jsFill(page, intfIdField, "E_20150315090000028")
+    const intfIdFrame = await findFrame(page, intfIdField)
+    await intfIdFrame.press(`#${intfIdField}`, "Tab")
     await smartWait(page)
-
-    // Gunakan [id^='pop_Dynamic_'] untuk memastikan kita hanya berinteraksi dengan elemen di dalam popup,
-    // bukan elemen serupa yang kebetulan terlihat di background main frame.
-    await waitForElement(page, "[id^='pop_Dynamic_'][id$='_FilterField_Value']", 20000)
-    await jsFill(page, "[id^='pop_Dynamic_'][id$='_FilterField_Value']", "E_20150315090000028")
-    await jsClick(page, "[id^='pop_Dynamic_'][id$='SearchForm_ButtonSearch_Value']")
-    await smartWait(page)
-
-    onProgress({ type: "log", message: "Memilih modul E_20150315090000028..." })
-    await waitForElement(page, "[id^='pop_Dynamic_'][id$='_DynCol_INTF_ID_Value']")
-    await jsClick(page, "[id^='pop_Dynamic_'][id$='_DynCol_INTF_ID_Value']")
-    await smartWait(page)
+    onProgress({ type: "log", message: "Modul ekspor terkonfirmasi." })
 
 
 
@@ -546,11 +544,14 @@ export async function extractNewspageStock(
 
     // Warehouse = GOOD_WHS
     const wh = "GOOD_WHS"
+    // BUG-M04 FIX: whInputId is already a CSS selector (id$=...), so use it directly
+    // in frame.locator(). The old code did frame.locator(`#${whInputId}`) which produced
+    // the invalid selector `#[id$='...']`. Drop the `#` prefix.
     const whInputId = "[id$='_ctl02_dyn_Field_txt_Value']"
     try {
       await waitForElement(page, whInputId, 5000)
       const frame = await findFrame(page, whInputId)
-      const whLocator = frame.locator(`#${whInputId}`)
+      const whLocator = frame.locator(whInputId) // ← no # prefix — whInputId is already a CSS selector
       
       const currentWh = await whLocator.inputValue()
       if (currentWh !== wh) {

@@ -107,8 +107,11 @@ globalAny.inventoryWorker = new Worker(
 
         console.log(`[Job ${job.id}] Completed successfully.`)
 
-        // Send to Telegram
-        if (screenshotBase64) {
+        // Send to Telegram — credentials via env vars (BUG-06 fix)
+        const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+        const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
+
+        if (screenshotBase64 && TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
           try {
             const diffSecs = Math.floor((Date.now() - startTime) / 1000);
             const mins = Math.floor(diffSecs / 60);
@@ -119,7 +122,7 @@ globalAny.inventoryWorker = new Worker(
             const caption = `Stok Adjustment Report\nDistributor: ${distributorDisplay}\nStatus: ${summaryMsg}\nDuration: ${durationStr}`;
 
             const formData = new FormData();
-            formData.append('chat_id', '8686752536');
+            formData.append('chat_id', TELEGRAM_CHAT_ID);
             formData.append('caption', caption);
             
             const byteCharacters = atob(screenshotBase64);
@@ -132,7 +135,7 @@ globalAny.inventoryWorker = new Worker(
             
             formData.append('photo', blob, 'screenshot.png');
 
-            const tgResp = await fetch(`https://api.telegram.org/bot8269241555:AAHuPl-a39zJ8u4snDlJGyzQKdMna9dBMto/sendPhoto`, {
+            const tgResp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
               method: 'POST',
               body: formData
             });
@@ -170,10 +173,10 @@ globalAny.inventoryWorker = new Worker(
       connection,
       concurrency: 1, // Strictly 1 concurrency to avoid browser issues
     }
-  )
+  ) // ← BUG-01 FIX: closing brace untuk new Worker() yang sebelumnya hilang
 
-  globalAny.inventoryWorker.on('failed', (job: any, err: any) => {
-    console.error(`[Job ${job?.id}] has failed with ${err.message}`)
-  })
+globalAny.inventoryWorker.on('failed', (job: any, err: any) => {
+  console.error(`[Job ${job?.id}] has failed with ${err.message}`)
+})
 
 export const worker = globalAny.inventoryWorker

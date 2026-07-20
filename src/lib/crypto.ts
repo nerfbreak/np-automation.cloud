@@ -1,6 +1,11 @@
 import crypto from 'crypto'
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'ce15b3de669e6dc9c1c4ba8c775d47e1f5386c4c9d99ae1d4ca85843a641a9c1' // 32 bytes (64 hex characters)
+// BUG-07 FIX: Never fall back to a hardcoded key — if ENCRYPTION_KEY is missing,
+// fail loudly rather than silently use a key that is visible in source code.
+if (!process.env.ENCRYPTION_KEY) {
+  throw new Error("ENCRYPTION_KEY environment variable is not set! Check your .env.local file.")
+}
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY // Must be 64 hex characters (32 bytes)
 const IV_LENGTH = 16 // For AES, this is always 16
 
 export function encrypt(text: string): string {

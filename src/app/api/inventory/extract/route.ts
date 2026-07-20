@@ -3,6 +3,9 @@ import { extractNewspageStock, isBrowserBusy, BotProgressEvent } from "@/lib/new
 import { supabaseAdmin } from "@/lib/supabase"
 import { decrypt } from "@/lib/crypto"
 
+// RF-03 FIX: Force Node.js runtime — Playwright, SSE streaming, and long-running
+// connections are incompatible with the Edge runtime.
+export const runtime = "nodejs"
 export const maxDuration = 300 // 5 minutes max
 
 export async function POST(req: NextRequest) {
