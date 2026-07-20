@@ -45,6 +45,7 @@ const globalAny: any = globalThis
 async function getOrCreateBrowser(): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
   // Cek kalau udah ada di memory (karena sekarang Next.js dan Worker jalan di proses yang sama)
   if (globalAny.activePage && globalAny.activeBrowser && globalAny.activeBrowser.isConnected() && !globalAny.activePage.isClosed()) {
+    globalAny.browserRefCount = (globalAny.browserRefCount || 0) + 1
     return { browser: globalAny.activeBrowser, context: globalAny.activeContext, page: globalAny.activePage }
   }
 
@@ -68,11 +69,19 @@ async function getOrCreateBrowser(): Promise<{ browser: Browser; context: Browse
     globalAny.activePage = await globalAny.activeContext.newPage()
     globalAny.activePage.setDefaultTimeout(TIMEOUT)
     globalAny.activePage.setDefaultNavigationTimeout(TIMEOUT)
+    globalAny.browserRefCount = 1 // Reset counter untuk browser baru
     
     return { browser: globalAny.activeBrowser, context: globalAny.activeContext, page: globalAny.activePage }
 }
 
 export async function closeBrowser(): Promise<void> {
+  // Kurangi ref count — hanya tutup browser kalau tidak ada yang pakai
+  globalAny.browserRefCount = Math.max(0, (globalAny.browserRefCount || 0) - 1)
+  if (globalAny.browserRefCount > 0) {
+    console.log(`[Browser] masih dipakai (ref: ${globalAny.browserRefCount}), skip close.`)
+    return
+  }
+
   if (globalAny.activeBrowser) {
     try {
       if (globalAny.activePage) {
@@ -82,12 +91,14 @@ export async function closeBrowser(): Promise<void> {
         await globalAny.activeContext.close().catch(() => {})
       }
       await globalAny.activeBrowser.close()
+      console.log(`[Browser] Closed. RAM freed.`)
     } catch (e) {
       console.error("Failed to close browser:", e)
     }
     globalAny.activeBrowser = null
     globalAny.activeContext = null
     globalAny.activePage = null
+    globalAny.browserRefCount = 0
   }
 }
 
