@@ -438,14 +438,14 @@ export async function extractNewspageStock(
       await waitForElement(page, "pag_FW_DisclaimerMessage_btn_okay_Value", 8000)
       onProgress({ type: "log", message: "Memeriksa disclaimer popup..." })
       await jsClick(page, "pag_FW_DisclaimerMessage_btn_okay_Value")
-      await smartWait(page)
+      await smartWait(page, 1500)
     } catch { /* no disclaimer */ }
 
     // ── Step 5: Interface search popup ───────────────────────────────────
     onProgress({ type: "log", message: "Membuka pencarian modul ekspor..." })
     await waitForElement(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_SelectButton")
     await jsClick(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_SelectButton")
-    await smartWait(page)
+    await smartWait(page, 2500)
 
     await waitForElement(page, "[id$='_FilterField_Value']", 20000)
     await jsFill(page, "[id$='_FilterField_Value']", "E_20150315090000028")
