@@ -93,7 +93,7 @@ globalAny.inventoryWorker = new Worker(
         // Gunakan adjustedCount (actual) bukan rows.length (input) untuk akurasi
         const isPartial = adjustedCount < rows.length
         const summaryMsg = isPartial
-          ? `⚠️ Partial: ${adjustedCount} dari ${rows.length} baris berhasil disesuaikan.`
+          ? `Partial: ${adjustedCount} dari ${rows.length} baris berhasil disesuaikan.`
           : `Successfully adjusted ${adjustedCount} rows.`
 
         await supabaseAdmin

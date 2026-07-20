@@ -448,7 +448,7 @@ export async function extractNewspageStock(
         hoverOk = true
         break
       } catch (err: any) {
-        onProgress({ type: "log", message: `⚠️ Hover SysAdminSetup attempt ${attempt}/3 gagal: ${err.message}` })
+        onProgress({ type: "log", message: `Hover SysAdminSetup attempt ${attempt}/3 gagal: ${err.message}` })
         if (attempt === 3) {
           // Ambil screenshot buat debug
           const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)

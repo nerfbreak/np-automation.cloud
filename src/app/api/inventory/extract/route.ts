@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       // Cek apakah browser untuk distributor ini sedang dipakai
       // (distributor lain boleh jalan bersamaan dengan browser mereka sendiri)
       if (username && isBrowserBusy(username)) {
-        send({ type: "error", message: "⚠️ Distributor ini sedang diproses. Tunggu sebentar dan coba lagi." })
+        send({ type: "error", message: "Distributor ini sedang diproses. Tunggu sebentar dan coba lagi." })
         controller.close()
         return
       }
