@@ -151,7 +151,7 @@ globalAny.inventoryWorker = new Worker(
       } catch (error: any) {
         console.error(`[Job ${job.id}] Failed:`, error.message)
         // Force close browser saat error — buang session stale agar job berikutnya fresh
-        await closeBrowser(distributor?.username ?? distributorUsername, true).catch(() => {})
+        await closeBrowser(distributorUsername, true).catch(() => {})
         await supabaseAdmin
           .from('jobs')
           .update({ 
