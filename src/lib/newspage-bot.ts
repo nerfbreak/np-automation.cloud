@@ -46,7 +46,9 @@ const globalAny: any = globalThis
 // ── Browser Pool ─────────────────────────────────────────────────────────────
 // Tiap distributor (username) punya browser instance sendiri.
 // Ini memungkinkan beberapa user jalan bersamaan tanpa konflik session.
-const MAX_CONCURRENT_BROWSERS = parseInt(process.env.MAX_CONCURRENT_BROWSERS || '3')
+const MAX_CONCURRENT_BROWSERS = parseInt(process.env.MAX_CONCURRENT_BROWSERS || '2')
+// Minimum free RAM sebelum boleh spawn browser baru (~500MB per Chromium instance)
+const MIN_FREE_RAM_MB = parseInt(process.env.MIN_FREE_RAM_MB || '700')
 interface BrowserInstance {
   browser: Browser
   context: BrowserContext
@@ -78,11 +80,17 @@ async function getOrCreateBrowser(
     return { browser: existing.browser, context: existing.context, page: existing.page }
   }
 
-  // Kalau pool sudah penuh, masuk antrian
-  if (pool.size >= MAX_CONCURRENT_BROWSERS) {
+  // Kalau pool sudah penuh ATAU RAM tidak cukup, masuk antrian
+  const freeMB = os.freemem() / 1024 / 1024
+  const ramOk = freeMB >= MIN_FREE_RAM_MB
+  if (pool.size >= MAX_CONCURRENT_BROWSERS || !ramOk) {
     const queue = getWaitQueue()
     const position = queue.length + 1
-    console.log(`[Browser:${username}] Pool penuh (${pool.size}/${MAX_CONCURRENT_BROWSERS}), antrian #${position}`)
+    if (!ramOk) {
+      console.warn(`[Browser:${username}] RAM kritis! Free: ${Math.round(freeMB)}MB < ${MIN_FREE_RAM_MB}MB minimum. Antrian #${position}`)
+    } else {
+      console.log(`[Browser:${username}] Pool penuh (${pool.size}/${MAX_CONCURRENT_BROWSERS}), antrian #${position}`)
+    }
     onWaiting?.(position)
     await new Promise<void>(resolve => { queue.push({ resolve }) })
   }
