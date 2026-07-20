@@ -139,17 +139,19 @@ export default function TasksPage() {
             <TooltipProvider delay={300}>
               <div className="flex items-center justify-end">
                 <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleCancelJob(jobId)}
-                      className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    >
-                      <Ban className="h-3.5 w-3.5" />
-                      <span className="sr-only">Cancel Task</span>
-                    </Button>
-                  </TooltipTrigger>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleCancelJob(jobId)}
+                        className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Ban className="h-3.5 w-3.5" />
+                        <span className="sr-only">Cancel Task</span>
+                      </Button>
+                    }
+                  />
                   <TooltipContent>Cancel Task</TooltipContent>
                 </Tooltip>
               </div>
