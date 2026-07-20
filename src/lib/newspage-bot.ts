@@ -327,13 +327,14 @@ async function login(page: Page, creds: Credentials, onProgress: ProgressCallbac
   await page.fill("#txtUserid", finalUsername)
   await page.fill("#txtPasswd", creds.password)
   await page.click("#btnLogin")
+  await smartWait(page)
 
-  try {
-    await page.waitForSelector("#SYS_ASCX_btnContinue", { timeout: 5000 })
+  const hasPopup = await page.evaluate(() => !!document.querySelector("#SYS_ASCX_btnContinue")).catch(() => false)
+  if (hasPopup) {
     onProgress({ type: "log", message: "Sesi aktif terdeteksi — bypass..." })
     await jsClick(page, "SYS_ASCX_btnContinue")
     await smartWait(page)
-  } catch { /* no popup */ }
+  }
 
   onProgress({ type: "log", message: "Login berhasil." })
 }
