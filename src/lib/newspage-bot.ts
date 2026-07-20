@@ -329,8 +329,8 @@ export async function extractNewspageStock(
         onProgress({ type: "log", message: `⚠️ Hover SysAdminSetup attempt ${attempt}/3 gagal, retry...` })
         if (attempt === 3) {
           // Ambil screenshot buat debug
-          const ss = await page.screenshot({ encoding: "base64", fullPage: false }).catch(() => "")
-          if (ss) onProgress({ type: "screenshot", screenshotBase64: ss as string })
+          const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
+          if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString('base64') })
           throw new Error(`Gagal hover SysAdminSetup setelah 3x percobaan`)
         }
         await smartWait(page, 2000)
