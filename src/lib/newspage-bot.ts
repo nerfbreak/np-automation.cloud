@@ -186,7 +186,7 @@ async function findFrame(page: Page, selectorOrId: string): Promise<Frame> {
         for (let i = els.length - 1; i >= 0; i--) {
           if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) return true;
         }
-        return false;
+        return els.length > 0;
       },
       selectorOrId
     ).catch(() => false)
@@ -209,6 +209,7 @@ async function jsClick(page: Page, selectorOrId: string): Promise<void> {
     for (let i = els.length - 1; i >= 0; i--) {
       if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i]; break; }
     }
+    if (!el && els.length > 0) el = els[els.length - 1];
     if (el && el instanceof HTMLElement) {
       el.focus() // Wajib untuk WebForms: set SYS_activeElementId
       el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) // Eksekusi appendDelayCall() kalau ada di onmousedown
@@ -231,6 +232,7 @@ async function jsSelect(page: Page, selectorOrId: string, value: string): Promis
     for (let i = els.length - 1; i >= 0; i--) {
       if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLSelectElement; break; }
     }
+    if (!el && els.length > 0) el = els[els.length - 1] as HTMLSelectElement;
     if (!el) throw new Error(`${sel} disappeared`)
     el.value = val
     el.dispatchEvent(new Event("change", { bubbles: true }))
@@ -250,6 +252,7 @@ async function jsFill(page: Page, selectorOrId: string, value: string): Promise<
     for (let i = els.length - 1; i >= 0; i--) {
       if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLInputElement; break; }
     }
+    if (!el && els.length > 0) el = els[els.length - 1] as HTMLInputElement;
     if (!el) throw new Error(`${sel} disappeared`)
     const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
     nativeSetter?.call(el, val)
@@ -271,6 +274,7 @@ async function jsCheck(page: Page, selectorOrId: string): Promise<void> {
     for (let i = els.length - 1; i >= 0; i--) {
       if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLInputElement; break; }
     }
+    if (!el && els.length > 0) el = els[els.length - 1] as HTMLInputElement;
     if (!el) throw new Error(`${sel} disappeared`);
     if (!el.checked) {
       el.checked = true
