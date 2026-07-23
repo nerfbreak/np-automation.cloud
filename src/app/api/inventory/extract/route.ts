@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { extractNewspageStock, isBrowserBusy, BotProgressEvent } from "@/lib/newspage-bot"
+import { extractNewspageStock, BotProgressEvent } from "@/lib/newspage-bot"
 import { supabaseAdmin } from "@/lib/supabase"
 import { decrypt } from "@/lib/crypto"
 
@@ -19,13 +19,7 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
       }
 
-      // Cek apakah browser untuk distributor ini sedang dipakai
-      // (distributor lain boleh jalan bersamaan dengan browser mereka sendiri)
-      if (username && isBrowserBusy(username)) {
-        send({ type: "error", message: "Distributor ini sedang diproses. Tunggu sebentar dan coba lagi." })
-        controller.close()
-        return
-      }
+
 
       try {
         if (!username) {

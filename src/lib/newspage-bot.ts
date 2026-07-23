@@ -186,6 +186,191 @@ export async function closeBrowser(username: string, force = false): Promise<voi
   }
 }
 
+/**
+ * findFrame — search all frames (main + iframes) for an element by ID or CSS selector.
+ * Newspage loads its content in nested iframes.
+ */
+async function findFrame(page: Page, selectorOrId: string): Promise<Frame> {
+  for (const frame of page.frames()) {
+    const found = await frame.evaluate(
+      (sel) => {
+        let cssSel = sel;
+        if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
+          cssSel = `[id='${sel}']`;
+        }
+        const els = document.querySelectorAll(cssSel);
+        for (let i = els.length - 1; i >= 0; i--) {
+          if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) return true;
+        }
+        return els.length > 0;
+      },
+      selectorOrId
+    ).catch(() => false)
+    if (found) return frame
+  }
+  throw new Error(`Element not found in any frame: ${selectorOrId}`)
+}
+
+/** jsClick — fire click via native browser events (focus, mousedown, click) to ensure all WebForms handlers execute */
+async function jsClick(page: Page, selectorOrId: string): Promise<void> {
+  await waitForElement(page, selectorOrId) // Tunggu elemen muncul dulu (penting di VPS yang lebih lambat)
+  const frame = await findFrame(page, selectorOrId)
+  await frame.evaluate((sel) => {
+    let cssSel = sel;
+    if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
+      cssSel = `[id='${sel}']`;
+    }
+    let el: Element | null = null;
+    const els = document.querySelectorAll(cssSel);
+    for (let i = els.length - 1; i >= 0; i--) {
+      if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i]; break; }
+    }
+    if (!el && els.length > 0) el = els[els.length - 1];
+    if (el && el instanceof HTMLElement) {
+      el.focus() // Wajib untuk WebForms: set SYS_activeElementId
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) // Eksekusi appendDelayCall() kalau ada di onmousedown
+      el.click() // Eksekusi postback
+    }
+    else throw new Error(`Element ${sel} disappeared before click`)
+  }, selectorOrId)
+}
+
+/** jsSelect — set select value + dispatch change, searches all frames */
+async function jsSelect(page: Page, selectorOrId: string, value: string): Promise<void> {
+  const frame = await findFrame(page, selectorOrId)
+  await frame.evaluate(({ sel, val }) => {
+    let cssSel = sel;
+    if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
+      cssSel = `[id='${sel}']`;
+    }
+    let el: HTMLSelectElement | null = null;
+    const els = document.querySelectorAll(cssSel);
+    for (let i = els.length - 1; i >= 0; i--) {
+      if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLSelectElement; break; }
+    }
+    if (!el && els.length > 0) el = els[els.length - 1] as HTMLSelectElement;
+    if (!el) throw new Error(`${sel} disappeared`)
+    el.value = val
+    el.dispatchEvent(new Event("change", { bubbles: true }))
+  }, { sel: selectorOrId, val: value })
+}
+
+
+/** jsFill — set input value + dispatch events, searches all frames */
+async function jsFill(page: Page, selectorOrId: string, value: string): Promise<void> {
+  const frame = await findFrame(page, selectorOrId)
+  await frame.evaluate(({ sel, val }) => {
+    let cssSel = sel;
+    if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
+      cssSel = `[id='${sel}']`;
+    }
+    let el: HTMLInputElement | null = null;
+    const els = document.querySelectorAll(cssSel);
+    for (let i = els.length - 1; i >= 0; i--) {
+      if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLInputElement; break; }
+    }
+    if (!el && els.length > 0) el = els[els.length - 1] as HTMLInputElement;
+    if (!el) throw new Error(`${sel} disappeared`)
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
+    nativeSetter?.call(el, val)
+    el.dispatchEvent(new Event("input", { bubbles: true }))
+    el.dispatchEvent(new Event("change", { bubbles: true }))
+  }, { sel: selectorOrId, val: value })
+}
+
+/** jsCheck — check a checkbox via JS, searches all frames */
+async function jsCheck(page: Page, selectorOrId: string): Promise<void> {
+  const frame = await findFrame(page, selectorOrId)
+  await frame.evaluate((sel) => {
+    let cssSel = sel;
+    if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
+      cssSel = `[id='${sel}']`;
+    }
+    let el: HTMLInputElement | null = null;
+    const els = document.querySelectorAll(cssSel);
+    for (let i = els.length - 1; i >= 0; i--) {
+      if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLInputElement; break; }
+    }
+    if (!el && els.length > 0) el = els[els.length - 1] as HTMLInputElement;
+    if (!el) throw new Error(`${sel} disappeared`);
+    if (!el.checked) {
+      el.checked = true
+      el.dispatchEvent(new Event("change", { bubbles: true }))
+    }
+  }, selectorOrId)
+}
+
+
+
+/** 
+ * Smart wait khusus untuk portal ASP.NET legacy: 
+ * Menunggu network idle, load state, dan memberi jeda ekstra untuk memastikan UpdatePanel selesai me-render DOM.
+ */
+async function smartWait(page: Page, extraDelay = 250) {
+  // Tunggu sejenak memberi waktu bagi JS onclick handlers untuk nge-trigger 
+  // XMLHttpRequest/UpdatePanel postback sebelum kita nge-cek statusnya.
+  await page.waitForTimeout(500)
+  
+  await page.waitForLoadState("domcontentloaded").catch(() => {})
+  await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {})
+  
+  // Custom polling: Tunggu sampai semua frame bener-bener ready dan gak ada AJAX postback ASP.NET yang jalan
+  const start = Date.now()
+  while (Date.now() - start < 30000) {
+    let isBusy = false
+    for (const frame of page.frames()) {
+      const busy = await frame.evaluate(() => {
+        if (document.readyState !== 'complete') return true
+        
+        // Cek ASP.NET AJAX UpdatePanel state
+        const sys = (window as any).Sys
+        if (typeof sys !== 'undefined' && sys.WebForms && sys.WebForms.PageRequestManager) {
+          const prm = sys.WebForms.PageRequestManager.getInstance()
+          if (prm && prm.get_isInAsyncPostBack()) return true
+        }
+        return false
+      }).catch((e: Error) => {
+        // If the frame is navigating or destroyed, consider it BUSY.
+        // If it's a cross-origin error, ignore it.
+        if (e.message.includes('Execution context was destroyed') || e.message.includes('navigating')) return true;
+        return false;
+      })
+      
+      if (busy) {
+        isBusy = true
+        break
+      }
+    }
+    
+    if (!isBusy) break
+    await new Promise(r => setTimeout(r, 500))
+  }
+
+  // Delay fisik karena JavaScript UpdatePanel (UpdateProgress) kadang butuh waktu ekstra untuk me-replace DOM setelah request selesai
+  await page.waitForTimeout(extraDelay)
+}
+
+/** waitForElement — poll all frames until element appears, with timeout */
+async function waitForElement(page: Page, selectorOrId: string, timeoutMs = TIMEOUT): Promise<void> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    for (const frame of page.frames()) {
+      const found = await frame.evaluate((sel) => {
+        const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
+        if (!isSel) return !!document.getElementById(sel);
+        const els = document.querySelectorAll(sel);
+        for (let i = els.length - 1; i >= 0; i--) {
+          if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) return true;
+        }
+        return els.length > 0;
+      }, selectorOrId).catch(() => false)
+      if (found) return
+    }
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  throw new Error(`Timeout waiting for element: ${selectorOrId}`)
+}
+
 // ── Login ─────────────────────────────────────────────────────────────────────
 async function login(page: Page, creds: Credentials, onProgress: ProgressCallback): Promise<void> {
   onProgress({ type: "log", message: "Membuka portal Newspage..." })
