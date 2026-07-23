@@ -526,10 +526,47 @@ export async function extractNewspageStock(
     const intfIdField = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_Value"
     await waitForElement(page, intfIdField)
     await jsFill(page, intfIdField, "E_20150315090000028")
+    
+    // Verifikasi INTF_ID value bener ke-set
+    {
+      const frame = await findFrame(page, intfIdField)
+      const val = await frame.locator(`#${intfIdField}`).inputValue()
+      onProgress({ type: "log", message: `INTF_ID value setelah fill: "${val}"` })
+      if (val !== "E_20150315090000028") {
+        throw new Error(`INTF_ID gagal di-set. Value: "${val}"`)
+      }
+    }
+    
+    // Trigger ASP.NET postback secara explicit
+    // Tab press alone might not trigger __doPostBack on this field.
+    // ASP.NET uses __doPostBack(eventTarget, eventArgument) for AutoPostBack.
     const intfIdFrame = await findFrame(page, intfIdField)
-    await intfIdFrame.press(`#${intfIdField}`, "Tab")
-    // 📸 Step 5b: Right after INTF_ID Tab
-    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5b: right after INTF_ID Tab press" }) }
+    
+    // Method 1: Try __doPostBack directly (ASP.NET standard)
+    const postbackTriggered = await intfIdFrame.evaluate((fieldName) => {
+      // ASP.NET field name uses $ separator, convert from _ in ID
+      // ID: pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_Value  
+      // Name: pag_FW_SYS_INTF_JOB_DTL_PopupNew$INTF_ID$Value (or similar)
+      const el = document.getElementById(fieldName)
+      if (!el) return "element_not_found"
+      const nameAttr = (el as HTMLInputElement).name
+      
+      // Try __doPostBack if available
+      if (typeof (window as any).__doPostBack === "function") {
+        (window as any).__doPostBack(nameAttr || fieldName, "")
+        return `__doPostBack called with: ${nameAttr || fieldName}`
+      }
+      
+      // Fallback: fire blur + change
+      el.dispatchEvent(new Event("blur", { bubbles: true }))
+      el.dispatchEvent(new Event("change", { bubbles: true }))
+      return "fallback: blur+change fired"
+    }, intfIdField).catch(e => `error: ${e}`)
+    
+    onProgress({ type: "log", message: `Postback trigger: ${postbackTriggered}` })
+    
+    // 📸 Step 5b: Right after postback trigger
+    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5b: after INTF_ID postback trigger" }) }
     // INTF_ID Tab triggers heavy ASP.NET postback yang render grid DynamicFilter
     // (warehouse, status, dll). Grid bisa butuh 10-20 detik di VPS lambat.
     // POLL sampai grid muncul, bukan fixed wait.
