@@ -72,7 +72,7 @@ export default function ReportPage() {
           <TooltipProvider delay={300}>
             <Tooltip>
               <TooltipTrigger>
-                <div className="font-medium text-sm truncate max-w-[280px]">
+                <div className="font-medium text-sm truncate max-w-[350px]">
                   {name}
                 </div>
               </TooltipTrigger>
@@ -105,7 +105,7 @@ export default function ReportPage() {
       header: "Duration",
       cell: ({ row }) => {
         const status = row.original.status;
-        if (status === "PENDING") return <span className="text-muted-foreground text-sm">-</span>;
+        if (status === "PENDING") return <span className="text-muted-foreground text-xs">-</span>;
         
         const start = new Date(row.original.created_at);
         const end = status === "RUNNING" ? new Date() : new Date(row.original.updated_at);
@@ -114,7 +114,7 @@ export default function ReportPage() {
         const diffSecs = differenceInSeconds(end, start) % 60;
         
         return (
-          <span className="text-sm text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {diffMins > 0 ? `${diffMins}m ` : ''}{diffSecs}s
           </span>
         );
