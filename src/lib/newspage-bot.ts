@@ -352,11 +352,6 @@ async function waitForElement(page: Page, selectorOrId: string, timeoutMs = TIME
   throw new Error(`Timeout waiting for element: ${selectorOrId}`)
 }
 
-/** debugScreenshot — capture and send current page state as log */
-async function debugScreenshot(page: Page, onProgress: ProgressCallback): Promise<void> {
-  const buf = await page.screenshot({ fullPage: false })
-  onProgress({ type: "screenshot", screenshotBase64: buf.toString("base64"), message: "Debug screenshot" })
-}
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 async function login(page: Page, creds: Credentials, onProgress: ProgressCallback): Promise<void> {
@@ -482,14 +477,10 @@ export async function extractNewspageStock(
     await waitForElement(page, "pag_FW_SYS_INTF_JOB_btn_Add_Value")
     await jsClick(page, "pag_FW_SYS_INTF_JOB_btn_Add_Value")
     await smartWait(page)
-    // 📸 Step 4a
-    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 4a: setelah klik Add" }) }
 
     await waitForElement(page, "pag_FW_SYS_INTF_JOB_RootNew_btn_Next_Value")
     await jsClick(page, "pag_FW_SYS_INTF_JOB_RootNew_btn_Next_Value")
     await smartWait(page)
-    // 📸 Step 4b
-    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 4b: setelah klik Next" }) }
 
     // ── Step 4: General configuration ────────────────────────────────────
     onProgress({ type: "log", message: "Konfigurasi: Type=E, Desc, Timeout, ExeType=M..." })
@@ -501,12 +492,8 @@ export async function extractNewspageStock(
     const timeoutFrame = await findFrame(page, "pag_FW_SYS_INTF_JOB_NewGeneral_JOB_TIMEOUT_Value")
     await timeoutFrame.press("#pag_FW_SYS_INTF_JOB_NewGeneral_JOB_TIMEOUT_Value", "Tab")
     await jsSelect(page, "pag_FW_SYS_INTF_JOB_NewGeneral_EXE_TYPE_Value", "M")
-    // 📸 Step 4c: General config done
-    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 4c: General config selesai, sebelum Next" }) }
     await jsClick(page, "pag_FW_SYS_INTF_JOB_RootNew_btn_Next_Value")
     await smartWait(page)
-    // 📸 Step 4d: After Next (should show interface detail form)
-    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 4d: setelah Next ke interface detail" }) }
 
     // ── Step 5: Disclaimer ────────────────────────────────────────────────
     try {
@@ -515,8 +502,6 @@ export async function extractNewspageStock(
       await jsClick(page, "pag_FW_DisclaimerMessage_btn_okay_Value")
       await smartWait(page)
     } catch { /* no disclaimer */ }
-    // 📸 Step 5a: After disclaimer
-    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5a: setelah disclaimer" }) }
 
     // ── Step 5: Interface ID — via SelectButton popup ─────────────────────
     // Flow: klik SelectButton → popup pop_Dynamic muncul → search → klik result
@@ -527,9 +512,6 @@ export async function extractNewspageStock(
     await waitForElement(page, intfSelectBtn, TIMEOUT)
     await jsClick(page, intfSelectBtn)
     await smartWait(page, 3000) // Tunggu popup load
-
-    // 📸 Step 5b: Popup should be open
-    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5b: popup Interface ID" }) }
 
     // Fill search filter di popup
     const popupFilterId = "pop_Dynamic_gft_List_2_FilterField_Value"
@@ -543,9 +525,6 @@ export async function extractNewspageStock(
     await jsClick(page, popupSearchBtn)
     onProgress({ type: "log", message: "Searching..." })
     await smartWait(page, 3000) // Tunggu search result
-
-    // 📸 Step 5c: Search results
-    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5c: search results" }) }
 
     // Klik result link (row pertama)
     const popupResultLink = "pop_Dynamic_grd_Main_ctl02_DynCol_INTF_ID_Value"
@@ -583,9 +562,6 @@ export async function extractNewspageStock(
       onProgress({ type: "log", message: `WARNING: Grid DynamicFilter belum muncul setelah ${GRID_POLL_TIMEOUT / 1000}s.` })
     }
     await smartWait(page, 1000)
-
-    // 📸 Step 5d: After popup selection + postback
-    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5d: setelah pilih interface (grid " + (gridFound ? "FOUND" : "NOT FOUND") + ")" }) }
 
     onProgress({ type: "log", message: "Modul ekspor terkonfirmasi." })
 
@@ -688,9 +664,6 @@ export async function extractNewspageStock(
         onProgress({ type: "log", message: `Status = "${verifySt}" OK` })
       }
     }
-
-    // 📸 Step 6: All fields configured
-    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 6: semua field terkonfigurasi" }) }
 
     onProgress({ type: "log", message: "Semua field terkonfigurasi. Klik Add..." })
     await waitForElement(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_btn_Add_Value", TIMEOUT)
