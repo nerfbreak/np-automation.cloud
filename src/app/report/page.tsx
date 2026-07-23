@@ -72,7 +72,7 @@ export default function ReportPage() {
           <TooltipProvider delay={300}>
             <Tooltip>
               <TooltipTrigger>
-                <div className="font-semibold text-base truncate max-w-[200px]">
+                <div className="font-medium text-sm truncate max-w-[280px]">
                   {name}
                 </div>
               </TooltipTrigger>
@@ -88,12 +88,16 @@ export default function ReportPage() {
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => (
-        <div className="flex flex-col gap-1">
-          <StatusBadge status={row.getValue("status")} />
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {formatDistanceToNow(new Date(row.original.created_at), { addSuffix: true })}
-          </span>
-        </div>
+        <StatusBadge status={row.getValue("status")} />
+      ),
+    },
+    {
+      id: "time",
+      header: "Time",
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {formatDistanceToNow(new Date(row.original.created_at), { addSuffix: true })}
+        </span>
       ),
     },
     {
@@ -110,7 +114,7 @@ export default function ReportPage() {
         const diffSecs = differenceInSeconds(end, start) % 60;
         
         return (
-          <span className="text-sm font-mono text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
             {diffMins > 0 ? `${diffMins}m ` : ''}{diffSecs}s
           </span>
         );
