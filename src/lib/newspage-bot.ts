@@ -518,166 +518,80 @@ export async function extractNewspageStock(
     // 📸 Step 5a: After disclaimer
     { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5a: setelah disclaimer" }) }
 
-    // ── Step 5: Interface ID — direct fill (BUG-05 FIX) ─────────────────
-    // INTF_ID_SelectButton popup was REMOVED from Newspage portal (2026-07-12).
-    // The correct approach is to fill INTF_ID_Value directly and press Tab
-    // to trigger the ASP.NET AutoPostBack that validates and loads the interface.
-    onProgress({ type: "log", message: "Mengisi modul ekspor E_20150315090000028..." })
-    const intfIdField = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_Value"
-    await waitForElement(page, intfIdField)
-    await jsFill(page, intfIdField, "E_20150315090000028")
+    // ── Step 5: Interface ID — via SelectButton popup ─────────────────────
+    // Flow: klik SelectButton → popup pop_Dynamic muncul → search → klik result
+    // Popup selection triggers server-side postback yang render grd_DynamicFilter
+    // (warehouse, status fields). Direct fill INTF_ID_Value TIDAK trigger postback.
+    onProgress({ type: "log", message: "Membuka popup Interface ID..." })
+    const intfSelectBtn = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_SelectButton"
+    await waitForElement(page, intfSelectBtn, TIMEOUT)
+    await jsClick(page, intfSelectBtn)
+    await smartWait(page, 3000) // Tunggu popup load
+
+    // 📸 Step 5b: Popup should be open
+    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5b: popup Interface ID" }) }
+
+    // Fill search filter di popup
+    const popupFilterId = "pop_Dynamic_gft_List_2_FilterField_Value"
+    onProgress({ type: "log", message: "Mengisi filter E_20150315090000028 di popup..." })
+    await waitForElement(page, popupFilterId, TIMEOUT)
+    await jsFill(page, popupFilterId, "E_20150315090000028")
     
-    // Verifikasi INTF_ID value bener ke-set
-    {
-      const frame = await findFrame(page, intfIdField)
-      const val = await frame.locator(`#${intfIdField}`).inputValue()
-      onProgress({ type: "log", message: `INTF_ID value setelah fill: "${val}"` })
-      if (val !== "E_20150315090000028") {
-        throw new Error(`INTF_ID gagal di-set. Value: "${val}"`)
-      }
-    }
+    // Klik Search
+    const popupSearchBtn = "pop_Dynamic_grd_Main_SearchForm_ButtonSearch_Value"
+    await waitForElement(page, popupSearchBtn, TIMEOUT)
+    await jsClick(page, popupSearchBtn)
+    onProgress({ type: "log", message: "Searching..." })
+    await smartWait(page, 3000) // Tunggu search result
+
+    // 📸 Step 5c: Search results
+    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5c: search results" }) }
+
+    // Klik result link (row pertama)
+    const popupResultLink = "pop_Dynamic_grd_Main_ctl02_DynCol_INTF_ID_Value"
+    onProgress({ type: "log", message: "Memilih E_20150315090000028 dari hasil search..." })
+    await waitForElement(page, popupResultLink, TIMEOUT)
     
-    // Trigger ASP.NET postback secara explicit
-    // Tab press alone might not trigger __doPostBack on this field.
-    // ASP.NET uses __doPostBack(eventTarget, eventArgument) for AutoPostBack.
-    const intfIdFrame = await findFrame(page, intfIdField)
+    // Result link uses __doPostBack via href — need to trigger via click, not jsClick
+    // because it closes popup and triggers parent page postback
+    const popupFrame = await findFrame(page, popupResultLink)
+    await popupFrame.locator(`#${popupResultLink}`).click()
     
-    // Method 1: Try __doPostBack directly (ASP.NET standard)
-    const postbackTriggered = await intfIdFrame.evaluate((fieldName) => {
-      // ASP.NET field name uses $ separator, convert from _ in ID
-      // ID: pag_FW_SYS_INTF_JOB_DTL_PopupNew_INTF_ID_Value  
-      // Name: pag_FW_SYS_INTF_JOB_DTL_PopupNew$INTF_ID$Value (or similar)
-      const el = document.getElementById(fieldName)
-      if (!el) return "element_not_found"
-      const nameAttr = (el as HTMLInputElement).name
-      
-      // Try __doPostBack if available
-      if (typeof (window as any).__doPostBack === "function") {
-        (window as any).__doPostBack(nameAttr || fieldName, "")
-        return `__doPostBack called with: ${nameAttr || fieldName}`
-      }
-      
-      // Fallback: fire blur + change
-      el.dispatchEvent(new Event("blur", { bubbles: true }))
-      el.dispatchEvent(new Event("change", { bubbles: true }))
-      return "fallback: blur+change fired"
-    }, intfIdField).catch(e => `error: ${e}`)
+    onProgress({ type: "log", message: "Menunggu postback setelah pilih interface (grid DynamicFilter loading)..." })
     
-    onProgress({ type: "log", message: `Postback trigger: ${postbackTriggered}` })
-    
-    // 📸 Step 5b: Right after postback trigger
-    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5b: after INTF_ID postback trigger" }) }
-    // INTF_ID Tab triggers heavy ASP.NET postback yang render grid DynamicFilter
-    // (warehouse, status, dll). Grid bisa butuh 10-20 detik di VPS lambat.
-    // POLL sampai grid muncul, bukan fixed wait.
-    onProgress({ type: "log", message: "Menunggu grid DynamicFilter muncul setelah INTF_ID postback..." })
-    const GRID_POLL_TIMEOUT = 30000 // 30 detik max
+    // Poll sampai grd_DynamicFilter muncul — this is the real postback
+    const GRID_POLL_TIMEOUT = 45000 // 45 detik max (popup close + postback + render)
     const gridPollStart = Date.now()
     let gridFound = false
     while (Date.now() - gridPollStart < GRID_POLL_TIMEOUT) {
+      await new Promise(r => setTimeout(r, 1500)) // poll setiap 1.5 detik
       for (const frame of page.frames()) {
         gridFound = await frame.evaluate(() => {
-          // Cek apakah grid DynamicFilter sudah di-render
           const grid = document.querySelector("[id*='grd_DynamicFilter']")
           if (!grid) return false
-          // Cek apakah ada input/select di dalam grid (bukan cuma header)
           const inputs = grid.querySelectorAll("input, select")
           return inputs.length > 0
         }).catch(() => false)
         if (gridFound) break
       }
       if (gridFound) break
-      await new Promise(r => setTimeout(r, 1000)) // poll setiap 1 detik
     }
     
     if (gridFound) {
       onProgress({ type: "log", message: `Grid DynamicFilter muncul setelah ${Math.round((Date.now() - gridPollStart) / 1000)}s` })
     } else {
-      onProgress({ type: "log", message: `WARNING: Grid DynamicFilter belum muncul setelah ${GRID_POLL_TIMEOUT / 1000}s. Coba lanjut...` })
+      onProgress({ type: "log", message: `WARNING: Grid DynamicFilter belum muncul setelah ${GRID_POLL_TIMEOUT / 1000}s.` })
     }
-    // 📸 Step 5c: After grid poll
-    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5c: setelah grid poll (grid " + (gridFound ? "FOUND" : "NOT FOUND") + ")" }) }
-    
-    // Dump partial HTML dari form area — cari apakah grd_DynamicFilter ada tapi hidden
-    for (const frame of page.frames()) {
-      const htmlDump = await frame.evaluate(() => {
-        // Cari elemen yang ID-nya mengandung PopupNew (area form detail)
-        const containers = document.querySelectorAll("[id*='PopupNew'], [id*='DynamicFilter'], [id*='dyn_Field']")
-        if (containers.length === 0) return null
-        const ids = Array.from(containers).map(el => {
-          const tag = el.tagName.toLowerCase()
-          const id = el.id
-          const vis = (el as HTMLElement).offsetHeight > 0 ? "visible" : "hidden"
-          const childCount = el.children.length
-          return `<${tag} id="${id}" ${vis} children=${childCount}>`
-        })
-        return ids.join("\n")
-      }).catch(() => null)
-      if (htmlDump) {
-        onProgress({ type: "log", message: `HTML dump (frame): \n${htmlDump}` })
-      }
-    }
-    await smartWait(page, 1000) // Extra settle time setelah grid muncul
+    await smartWait(page, 1000)
+
+    // 📸 Step 5d: After popup selection + postback
+    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5d: setelah pilih interface (grid " + (gridFound ? "FOUND" : "NOT FOUND") + ")" }) }
+
     onProgress({ type: "log", message: "Modul ekspor terkonfirmasi." })
 
-    // ── Step 5b: Discover ALL form fields ───────────────────────────────
-    // Dump every input/select/textarea across all frames to find warehouse & status.
-    // ASP.NET WebForms IDs are unpredictable — we match by label text instead.
-    onProgress({ type: "log", message: "Scanning semua form fields di semua frames..." })
-    let dynFieldMap: Record<string, { id: string, type: string, label: string, frameIndex: number }> = {}
-    const allFrames = page.frames()
-    for (let fi = 0; fi < allFrames.length; fi++) {
-      const fields = await allFrames[fi].evaluate(() => {
-        const result: Array<{ id: string, type: string, label: string }> = []
-        // Scan ALL input, select, textarea — not just dyn_Field
-        const els = document.querySelectorAll("input, select, textarea")
-        for (const el of els) {
-          const id = el.id
-          if (!id) continue
-          // Skip hidden/system fields
-          const htmlEl = el as HTMLInputElement
-          if (htmlEl.type === "hidden") continue
-          const type = el.tagName.toLowerCase() === "select" ? "select" 
-                     : el.tagName.toLowerCase() === "textarea" ? "textarea" : "input"
-          // Cari label: span/label di parent TR, atau preceding sibling
-          let label = ""
-          const row = el.closest("tr")
-          if (row) {
-            const spans = row.querySelectorAll("span, label, td")
-            for (const sp of spans) {
-              const text = sp.textContent?.trim()
-              if (text && text.length > 1 && text.length < 50 
-                  && !text.startsWith("pag_") && sp !== el && !sp.contains(el)) {
-                label = text
-                break
-              }
-            }
-          }
-          result.push({ id, type, label })
-        }
-        return result
-      }).catch(() => [])
-
-      for (const f of fields) {
-        dynFieldMap[f.id] = { ...f, frameIndex: fi }
-      }
-    }
-
-    const dynFieldList = Object.values(dynFieldMap)
-    // Log all fields for debugging (truncate if too many)
-    const fieldsSummary = dynFieldList.map(f => `[F${f.frameIndex}] ${f.label || "?"} → ${f.id} (${f.type})`).join(" | ")
-    onProgress({ type: "log", message: `Ditemukan ${dynFieldList.length} form fields: ${fieldsSummary.substring(0, 2000)}` })
-
-    // Debug screenshot setelah INTF_ID postback — lihat state form saat ini
-    {
-      const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
-      if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString("base64"), message: "Debug: form state setelah INTF_ID postback" })
-    }
-
     // ── Step 6: File type, separator, warehouse, status ───────────────────
-    // CRITICAL: Setiap field WAJIB berhasil di-set. Kalau gagal = job jalan
-    // tanpa filter → data BAD_WHS ikut tereksport.
-    // Setiap field: waitForElement → set value → smartWait → verifikasi value.
+    // Popup selection rendered all fields including grd_DynamicFilter.
+    // Set each field with verification.
     onProgress({ type: "log", message: "Konfigurasi file type, separator, warehouse, status..." })
     
     // File Type = D (Download)
@@ -724,101 +638,17 @@ export async function extractNewspageStock(
       onProgress({ type: "log", message: "Separator = Tab OK" })
     }
 
-    // ── Re-scan fields setelah File Type + Separator postback ──────────
-    // ASP.NET mungkin render field tambahan (warehouse, status) setelah postback
-    onProgress({ type: "log", message: "Re-scanning fields setelah File Type + Separator..." })
-    dynFieldMap = {}
-    const allFrames2 = page.frames()
-    for (let fi = 0; fi < allFrames2.length; fi++) {
-      const fields = await allFrames2[fi].evaluate(() => {
-        const result: Array<{ id: string, type: string, label: string, tagName: string }> = []
-        const els = document.querySelectorAll("input, select, textarea")
-        for (const el of els) {
-          const id = el.id
-          if (!id) continue
-          const htmlEl = el as HTMLInputElement
-          if (htmlEl.type === "hidden") continue
-          const type = el.tagName.toLowerCase() === "select" ? "select" 
-                     : el.tagName.toLowerCase() === "textarea" ? "textarea" : "input"
-          let label = ""
-          const row = el.closest("tr")
-          if (row) {
-            const spans = row.querySelectorAll("span, label, td")
-            for (const sp of spans) {
-              const text = sp.textContent?.trim()
-              if (text && text.length > 1 && text.length < 50 
-                  && !text.startsWith("pag_") && sp !== el && !sp.contains(el)) {
-                label = text
-                break
-              }
-            }
-          }
-          result.push({ id, type, label, tagName: el.tagName })
-        }
-        return result
-      }).catch(() => [])
-      for (const f of fields) {
-        dynFieldMap[f.id] = { ...f, frameIndex: fi }
-      }
-    }
-    const dynFieldList2 = Object.values(dynFieldMap)
-    const newFields = dynFieldList2.filter(f => !dynFieldList.find(d => d.id === f.id))
-    onProgress({ type: "log", message: `Re-scan: ${dynFieldList2.length} total fields. ${newFields.length} BARU: ${newFields.map(f => `[F${f.frameIndex}] ${f.label || "?"} → ${f.id} (${f.type})`).join(" | ") || "(none)"}` })
-    
-    // Screenshot untuk lihat state setelah File Type + Separator
-    {
-      const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
-      if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString("base64"), message: "Debug: form setelah File Type + Separator" })
-    }
-
-    // ── Cari warehouse & status dari grid DynamicFilter ──────────────
-    // Field warehouse ada di grid: grd_DynamicFilter, row ctl02
-    // Exact ID: pag_FW_SYS_INTF_JOB_DTL_PopupNew_grd_DynamicFilter_ctl02_dyn_Field_txt_Value
-    const allDiscovered = dynFieldList2
-
-    // Warehouse = warehouseCode (dari parameter, default GOOD_WHS)
+    // ── Warehouse = warehouseCode (default GOOD_WHS) ──────────────────
+    // Exact ID from HTML: grd_DynamicFilter row ctl02
     const wh = warehouseCode || "GOOD_WHS"
     const WAREHOUSE_EXACT_ID = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_grd_DynamicFilter_ctl02_dyn_Field_txt_Value"
     
-    let whFieldId: string | null = null
-    // Check exact ID exists in any frame
-    for (const frame of page.frames()) {
-      const found = await frame.evaluate((id) => !!document.getElementById(id), WAREHOUSE_EXACT_ID).catch(() => false)
-      if (found) { whFieldId = WAREHOUSE_EXACT_ID; break }
-    }
-    
-    if (whFieldId) {
-      onProgress({ type: "log", message: `Warehouse field via exact ID: ${whFieldId}` })
-    } else {
-      // Fallback: scan grid rows for dyn_Field_txt
-      onProgress({ type: "log", message: "Exact warehouse ID gak ada, scan grid DynamicFilter..." })
-      for (const frame of page.frames()) {
-        const gridFields = await frame.evaluate(() => {
-          const r: string[] = []
-          document.querySelectorAll("[id*='grd_DynamicFilter'][id*='dyn_Field_txt']").forEach(el => { if (el.id) r.push(el.id) })
-          return r
-        }).catch(() => [])
-        if (gridFields.length > 0) {
-          whFieldId = gridFields[0]
-          onProgress({ type: "log", message: `Warehouse via grid scan: ${whFieldId} (${gridFields.length} candidates)` })
-          break
-        }
-      }
-    }
-
-    if (!whFieldId) {
-      const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
-      if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString("base64"), message: "Screenshot: warehouse not found" })
-      onProgress({ type: "log", message: `KRITIS: Warehouse field TIDAK ditemukan. IDs: ${allDiscovered.map(f => f.id).join(", ")}` })
-      throw new Error("Warehouse field tidak ditemukan. Job dibatalkan.")
-    }
-
-    onProgress({ type: "log", message: `Mengisi warehouse "${wh}" ke ${whFieldId}...` })
-    await waitForElement(page, whFieldId, TIMEOUT)
+    onProgress({ type: "log", message: `Mengisi warehouse "${wh}"...` })
+    await waitForElement(page, WAREHOUSE_EXACT_ID, TIMEOUT)
     await smartWait(page, 500)
     {
-      const frame = await findFrame(page, whFieldId!)
-      const whEl = frame.locator(`#${whFieldId}`)
+      const frame = await findFrame(page, WAREHOUSE_EXACT_ID)
+      const whEl = frame.locator(`#${WAREHOUSE_EXACT_ID}`)
       const currentWh = await whEl.inputValue()
       onProgress({ type: "log", message: `Warehouse: "${currentWh}" → "${wh}"` })
       if (currentWh !== wh) {
@@ -835,38 +665,16 @@ export async function extractNewspageStock(
       onProgress({ type: "log", message: `Warehouse = "${verifyWh}" OK` })
     }
     
-    // Status = A (Active) — grid row ctl07
+    // ── Status = A (Active) ──────────────────────────────────────────
+    // Exact ID from HTML: grd_DynamicFilter row ctl07
     const STATUS_EXACT_ID = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_grd_DynamicFilter_ctl07_dyn_Field_drp_Value"
     
-    let stFieldId: string | null = null
-    for (const frame of page.frames()) {
-      const found = await frame.evaluate((id) => !!document.getElementById(id), STATUS_EXACT_ID).catch(() => false)
-      if (found) { stFieldId = STATUS_EXACT_ID; break }
-    }
-    
-    if (!stFieldId) {
-      for (const frame of page.frames()) {
-        const gridSelects = await frame.evaluate(() => {
-          const r: string[] = []
-          document.querySelectorAll("[id*='grd_DynamicFilter'][id*='dyn_Field_drp']").forEach(el => { if (el.id) r.push(el.id) })
-          return r
-        }).catch(() => [])
-        if (gridSelects.length > 0) {
-          stFieldId = gridSelects[0]
-          onProgress({ type: "log", message: `Status via grid scan: ${stFieldId}` })
-          break
-        }
-      }
-    }
-
-    if (!stFieldId) {
-      onProgress({ type: "log", message: `WARNING: Status field gak ada di grid. SKIP status filter.` })
-    } else {
-      onProgress({ type: "log", message: `Status field: ${stFieldId}` })
-      await waitForElement(page, stFieldId, TIMEOUT)
-      await smartWait(page, 500)
-      const frame = await findFrame(page, stFieldId)
-      const st = frame.locator(`#${stFieldId}`).first()
+    onProgress({ type: "log", message: "Setting status = Active..." })
+    await waitForElement(page, STATUS_EXACT_ID, TIMEOUT)
+    await smartWait(page, 500)
+    {
+      const frame = await findFrame(page, STATUS_EXACT_ID)
+      const st = frame.locator(`#${STATUS_EXACT_ID}`).first()
       const currentSt = await st.inputValue()
       onProgress({ type: "log", message: `Status: "${currentSt}" → "A"` })
       if (currentSt !== "A") {
@@ -880,6 +688,9 @@ export async function extractNewspageStock(
         onProgress({ type: "log", message: `Status = "${verifySt}" OK` })
       }
     }
+
+    // 📸 Step 6: All fields configured
+    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 6: semua field terkonfigurasi" }) }
 
     onProgress({ type: "log", message: "Semua field terkonfigurasi. Klik Add..." })
     await waitForElement(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_btn_Add_Value", TIMEOUT)
