@@ -518,10 +518,51 @@ export async function extractNewspageStock(
     await jsFill(page, intfIdField, "E_20150315090000028")
     const intfIdFrame = await findFrame(page, intfIdField)
     await intfIdFrame.press(`#${intfIdField}`, "Tab")
-    await smartWait(page)
+    // INTF_ID Tab triggers heavy ASP.NET postback yang render semua dynamic fields
+    // (warehouse, status, dll). VPS lambat butuh waktu lebih lama.
+    onProgress({ type: "log", message: "Menunggu postback modul ekspor selesai (dynamic fields loading)..." })
+    await smartWait(page, 3000) // Tunggu postback render dynamic fields
     onProgress({ type: "log", message: "Modul ekspor terkonfirmasi." })
 
+    // ── Step 5b: Discover dynamic field IDs ─────────────────────────────
+    // ASP.NET WebForms generates dynamic IDs (_ctl02, _ctl03, dll) yang bisa
+    // berubah index tergantung form state. Scan semua field untuk cari yang benar.
+    onProgress({ type: "log", message: "Scanning dynamic fields di form..." })
+    let dynFieldMap: Record<string, { id: string, type: string, label: string }> = {}
+    for (const frame of page.frames()) {
+      const fields = await frame.evaluate(() => {
+        const result: Array<{ id: string, type: string, label: string }> = []
+        // Cari semua input/select yang ID-nya mengandung dyn_Field
+        const els = document.querySelectorAll("[id*='dyn_Field']")
+        for (const el of els) {
+          const id = el.id
+          if (!id) continue
+          const type = el.tagName.toLowerCase() === "select" ? "select" : "input"
+          // Cari label: biasanya <span> atau <label> di row yang sama (parent TR)
+          let label = ""
+          const row = el.closest("tr")
+          if (row) {
+            const spans = row.querySelectorAll("span")
+            for (const sp of spans) {
+              const text = sp.textContent?.trim()
+              if (text && text.length > 1 && !text.startsWith("pag_")) {
+                label = text
+                break
+              }
+            }
+          }
+          result.push({ id, type, label })
+        }
+        return result
+      }).catch(() => [])
 
+      for (const f of fields) {
+        dynFieldMap[f.id] = f
+      }
+    }
+
+    const dynFieldList = Object.values(dynFieldMap)
+    onProgress({ type: "log", message: `Ditemukan ${dynFieldList.length} dynamic fields: ${dynFieldList.map(f => `${f.label || "?"} → ${f.id} (${f.type})`).join(" | ")}` })
 
     // ── Step 6: File type, separator, warehouse, status ───────────────────
     // CRITICAL: Setiap field WAJIB berhasil di-set. Kalau gagal = job jalan
@@ -574,25 +615,47 @@ export async function extractNewspageStock(
     }
 
     // Warehouse = warehouseCode (dari parameter, default GOOD_WHS)
-    // BUG-M04 FIX: whInputId is CSS selector (id$=...), jangan prefix #
+    // Dynamic discovery: cari field yang label mengandung "warehouse" atau "whs"
+    // Fallback ke hardcoded selector kalau discovery gagal
     const wh = warehouseCode || "GOOD_WHS"
-    const whInputId = "[id$='_ctl02_dyn_Field_txt_Value']"
+    const whField = dynFieldList.find(f => 
+      f.type === "input" && (
+        f.label.toLowerCase().includes("warehouse") || 
+        f.label.toLowerCase().includes("whs") ||
+        f.label.toLowerCase().includes("gudang")
+      )
+    )
+    const whSelector = whField ? `#${whField.id}` : "[id$='_dyn_Field_txt_Value']"
+    const whSelectorForWait = whField ? whField.id : "[id$='_dyn_Field_txt_Value']"
+    onProgress({ type: "log", message: `Warehouse field: ${whField ? `"${whField.label}" → ${whField.id}` : `fallback selector ${whSelector}`}` })
     onProgress({ type: "log", message: `Menunggu field Warehouse muncul...` })
-    await waitForElement(page, whInputId, TIMEOUT)
+    await waitForElement(page, whSelectorForWait, TIMEOUT)
     await smartWait(page, 500)
     {
-      const frame = await findFrame(page, whInputId)
-      const whLocator = frame.locator(whInputId) // No # prefix — already CSS selector
+      const frame = await findFrame(page, whSelectorForWait)
+      const whLocator = frame.locator(whSelector)
       
-      const currentWh = await whLocator.inputValue()
+      // Kalau ada multiple match, ambil yang visible
+      const count = await whLocator.count()
+      if (count === 0) {
+        const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
+        if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString("base64"), message: "Screenshot: warehouse field not found" })
+        throw new Error(`Warehouse field tidak ditemukan dengan selector: ${whSelector}`)
+      }
+      if (count > 1) {
+        onProgress({ type: "log", message: `WARNING: ${count} elements match warehouse selector. Pakai yang pertama.` })
+      }
+      const whEl = whLocator.first()
+      
+      const currentWh = await whEl.inputValue()
       onProgress({ type: "log", message: `Warehouse saat ini: "${currentWh}" → target: "${wh}"` })
       if (currentWh !== wh) {
-        await whLocator.fill(wh)
-        await whLocator.press("Tab") // Trigger ASP.NET AutoPostBack validation
+        await whEl.fill(wh)
+        await whEl.press("Tab") // Trigger ASP.NET AutoPostBack validation
         await smartWait(page, 2000) // Tunggu postback selesai
       }
       // Verifikasi — WAJIB cocok, kalau tidak data BAD_WHS ikut terexport
-      const verifyWh = await whLocator.inputValue()
+      const verifyWh = await whEl.inputValue()
       if (verifyWh !== wh) {
         const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
         if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString("base64"), message: "Screenshot gagal set warehouse" })
@@ -602,14 +665,19 @@ export async function extractNewspageStock(
     }
     
     // Status = A (Active)
-    // BUG FIX: statusId is CSS selector (id$=...), jangan prefix #
-    const statusId = "[id$='_ctl07_dyn_Field_drp_Value']"
+    // Dynamic discovery: cari select field yang label mengandung "status"
+    const stField = dynFieldList.find(f => 
+      f.type === "select" && f.label.toLowerCase().includes("status")
+    )
+    const stSelector = stField ? `#${stField.id}` : "[id$='_dyn_Field_drp_Value']"
+    const stSelectorForWait = stField ? stField.id : "[id$='_dyn_Field_drp_Value']"
+    onProgress({ type: "log", message: `Status field: ${stField ? `"${stField.label}" → ${stField.id}` : `fallback selector ${stSelector}`}` })
     onProgress({ type: "log", message: "Menunggu field Status muncul..." })
-    await waitForElement(page, statusId, TIMEOUT)
+    await waitForElement(page, stSelectorForWait, TIMEOUT)
     await smartWait(page, 500)
     {
-      const frame = await findFrame(page, statusId)
-      const st = frame.locator(statusId) // No # prefix — already CSS selector
+      const frame = await findFrame(page, stSelectorForWait)
+      const st = frame.locator(stSelector).first()
       
       const currentSt = await st.inputValue()
       onProgress({ type: "log", message: `Status saat ini: "${currentSt}" → target: "A"` })
