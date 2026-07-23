@@ -628,47 +628,96 @@ export async function extractNewspageStock(
       onProgress({ type: "log", message: "Separator = Tab OK" })
     }
 
+    // ── Re-scan fields setelah File Type + Separator postback ──────────
+    // ASP.NET mungkin render field tambahan (warehouse, status) setelah postback
+    onProgress({ type: "log", message: "Re-scanning fields setelah File Type + Separator..." })
+    dynFieldMap = {}
+    const allFrames2 = page.frames()
+    for (let fi = 0; fi < allFrames2.length; fi++) {
+      const fields = await allFrames2[fi].evaluate(() => {
+        const result: Array<{ id: string, type: string, label: string, tagName: string }> = []
+        const els = document.querySelectorAll("input, select, textarea")
+        for (const el of els) {
+          const id = el.id
+          if (!id) continue
+          const htmlEl = el as HTMLInputElement
+          if (htmlEl.type === "hidden") continue
+          const type = el.tagName.toLowerCase() === "select" ? "select" 
+                     : el.tagName.toLowerCase() === "textarea" ? "textarea" : "input"
+          let label = ""
+          const row = el.closest("tr")
+          if (row) {
+            const spans = row.querySelectorAll("span, label, td")
+            for (const sp of spans) {
+              const text = sp.textContent?.trim()
+              if (text && text.length > 1 && text.length < 50 
+                  && !text.startsWith("pag_") && sp !== el && !sp.contains(el)) {
+                label = text
+                break
+              }
+            }
+          }
+          result.push({ id, type, label, tagName: el.tagName })
+        }
+        return result
+      }).catch(() => [])
+      for (const f of fields) {
+        dynFieldMap[f.id] = { ...f, frameIndex: fi }
+      }
+    }
+    const dynFieldList2 = Object.values(dynFieldMap)
+    const newFields = dynFieldList2.filter(f => !dynFieldList.find(d => d.id === f.id))
+    onProgress({ type: "log", message: `Re-scan: ${dynFieldList2.length} total fields. ${newFields.length} BARU: ${newFields.map(f => `[F${f.frameIndex}] ${f.label || "?"} → ${f.id} (${f.type})`).join(" | ") || "(none)"}` })
+    
+    // Screenshot untuk lihat state setelah File Type + Separator
+    {
+      const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
+      if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString("base64"), message: "Debug: form setelah File Type + Separator" })
+    }
+
+    // ── Cari warehouse & status dari SEMUA discovered fields ──────────
+    // Gabung dari kedua scan (sebelum dan sesudah File Type)
+    const allDiscovered = dynFieldList2
+
     // Warehouse = warehouseCode (dari parameter, default GOOD_WHS)
     // Dynamic discovery: cari field yang label mengandung "warehouse" atau "whs"
-    // Fallback ke hardcoded selector kalau discovery gagal
+    // Fallback ke broad selector kalau discovery gagal
     const wh = warehouseCode || "GOOD_WHS"
-    const whField = dynFieldList.find(f => 
+    const whField = allDiscovered.find(f => 
       f.type === "input" && (
         f.label.toLowerCase().includes("warehouse") || 
         f.label.toLowerCase().includes("whs") ||
-        f.label.toLowerCase().includes("gudang")
+        f.label.toLowerCase().includes("gudang") ||
+        f.id.toLowerCase().includes("warehouse") ||
+        f.id.toLowerCase().includes("whs")
       )
     )
-    const whSelector = whField ? `#${whField.id}` : "[id$='_dyn_Field_txt_Value']"
-    const whSelectorForWait = whField ? whField.id : "[id$='_dyn_Field_txt_Value']"
-    onProgress({ type: "log", message: `Warehouse field: ${whField ? `"${whField.label}" → ${whField.id}` : `fallback selector ${whSelector}`}` })
-    onProgress({ type: "log", message: `Menunggu field Warehouse muncul...` })
-    await waitForElement(page, whSelectorForWait, TIMEOUT)
-    await smartWait(page, 500)
-    {
-      const frame = await findFrame(page, whSelectorForWait)
+    // Broader fallback: any input field with "dyn_Field" and "txt" in ID
+    const whFieldFallback = !whField ? allDiscovered.find(f => 
+      f.type === "input" && f.id.includes("dyn_Field") && f.id.includes("txt")
+    ) : null
+    const whFieldFinal = whField || whFieldFallback
+    
+    if (!whFieldFinal) {
+      // Warehouse field genuinely not in this form — log and skip
+      onProgress({ type: "log", message: `WARNING: Warehouse field TIDAK ditemukan di form. ${allDiscovered.length} fields tersedia. Mungkin modul ini tidak support filter warehouse. SKIP warehouse filter.` })
+    } else {
+      const whSelector = `#${whFieldFinal.id}`
+      onProgress({ type: "log", message: `Warehouse field: "${whFieldFinal.label}" → ${whFieldFinal.id}` })
+      onProgress({ type: "log", message: `Menunggu field Warehouse muncul...` })
+      await waitForElement(page, whFieldFinal.id, TIMEOUT)
+      await smartWait(page, 500)
+      const frame = await findFrame(page, whFieldFinal.id)
       const whLocator = frame.locator(whSelector)
-      
-      // Kalau ada multiple match, ambil yang visible
-      const count = await whLocator.count()
-      if (count === 0) {
-        const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
-        if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString("base64"), message: "Screenshot: warehouse field not found" })
-        throw new Error(`Warehouse field tidak ditemukan dengan selector: ${whSelector}`)
-      }
-      if (count > 1) {
-        onProgress({ type: "log", message: `WARNING: ${count} elements match warehouse selector. Pakai yang pertama.` })
-      }
       const whEl = whLocator.first()
       
       const currentWh = await whEl.inputValue()
       onProgress({ type: "log", message: `Warehouse saat ini: "${currentWh}" → target: "${wh}"` })
       if (currentWh !== wh) {
         await whEl.fill(wh)
-        await whEl.press("Tab") // Trigger ASP.NET AutoPostBack validation
-        await smartWait(page, 2000) // Tunggu postback selesai
+        await whEl.press("Tab")
+        await smartWait(page, 2000)
       }
-      // Verifikasi — WAJIB cocok, kalau tidak data BAD_WHS ikut terexport
       const verifyWh = await whEl.inputValue()
       if (verifyWh !== wh) {
         const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
@@ -680,17 +729,27 @@ export async function extractNewspageStock(
     
     // Status = A (Active)
     // Dynamic discovery: cari select field yang label mengandung "status"
-    const stField = dynFieldList.find(f => 
-      f.type === "select" && f.label.toLowerCase().includes("status")
+    const stField = allDiscovered.find(f => 
+      f.type === "select" && (
+        f.label.toLowerCase().includes("status") ||
+        f.id.toLowerCase().includes("status")
+      )
     )
-    const stSelector = stField ? `#${stField.id}` : "[id$='_dyn_Field_drp_Value']"
-    const stSelectorForWait = stField ? stField.id : "[id$='_dyn_Field_drp_Value']"
-    onProgress({ type: "log", message: `Status field: ${stField ? `"${stField.label}" → ${stField.id}` : `fallback selector ${stSelector}`}` })
-    onProgress({ type: "log", message: "Menunggu field Status muncul..." })
-    await waitForElement(page, stSelectorForWait, TIMEOUT)
-    await smartWait(page, 500)
-    {
-      const frame = await findFrame(page, stSelectorForWait)
+    // Broader fallback: any select with "dyn_Field" and "drp" in ID
+    const stFieldFallback = !stField ? allDiscovered.find(f =>
+      f.type === "select" && f.id.includes("dyn_Field") && f.id.includes("drp")
+    ) : null
+    const stFieldFinal = stField || stFieldFallback
+
+    if (!stFieldFinal) {
+      onProgress({ type: "log", message: `WARNING: Status field TIDAK ditemukan di form. SKIP status filter.` })
+    } else {
+      const stSelector = `#${stFieldFinal.id}`
+      onProgress({ type: "log", message: `Status field: "${stFieldFinal.label}" → ${stFieldFinal.id}` })
+      onProgress({ type: "log", message: "Menunggu field Status muncul..." })
+      await waitForElement(page, stFieldFinal.id, TIMEOUT)
+      await smartWait(page, 500)
+      const frame = await findFrame(page, stFieldFinal.id)
       const st = frame.locator(stSelector).first()
       
       const currentSt = await st.inputValue()
@@ -699,10 +758,9 @@ export async function extractNewspageStock(
         await st.selectOption("A")
         await smartWait(page, 1500)
       }
-      // Verifikasi
       const verifySt = await st.inputValue()
       if (verifySt !== "A") {
-        onProgress({ type: "log", message: `WARNING: Gagal set Status ke "A". Masih: "${verifySt}". Lanjut dengan status default.` })
+        onProgress({ type: "log", message: `WARNING: Gagal set Status ke "A". Masih: "${verifySt}".` })
       } else {
         onProgress({ type: "log", message: `Status = "${verifySt}" OK` })
       }
