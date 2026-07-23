@@ -99,18 +99,9 @@ export default function TasksPage() {
       cell: ({ row }) => {
         const name = row.original.distributor_name || row.getValue("distributor_username") as string;
         return (
-          <TooltipProvider delay={300}>
-            <Tooltip>
-              <TooltipTrigger>
-                <div className="font-medium text-sm truncate max-w-[350px]">
-                  {name}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{name}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <div className="text-sm font-medium truncate max-w-[300px]" title={name}>
+            {name}
+          </div>
         );
       }
     },
@@ -118,16 +109,12 @@ export default function TasksPage() {
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => (
-        <StatusBadge status={row.getValue("status")} />
-      ),
-    },
-    {
-      id: "time",
-      header: "Time",
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {formatDistanceToNow(new Date(row.original.created_at), { addSuffix: true })}
-        </span>
+        <div className="flex flex-col items-start gap-1">
+          <StatusBadge status={row.getValue("status")} />
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {formatDistanceToNow(new Date(row.original.created_at), { addSuffix: true })}
+          </span>
+        </div>
       ),
     },
     {
