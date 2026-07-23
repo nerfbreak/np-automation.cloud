@@ -150,8 +150,8 @@ globalAny.inventoryWorker = new Worker(
           }
         }
 
-        // Kill browser setelah job selesai untuk free RAM di VPS
-        await closeBrowser(distributor.username)
+        // Force kill browser setelah job selesai untuk free RAM di VPS
+        await closeBrowser(distributor.username, true)
         console.log(`[Job ${job.id}] Browser closed.`)
 
         return { success: true }

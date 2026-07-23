@@ -371,7 +371,17 @@ async function login(page: Page, creds: Credentials, onProgress: ProgressCallbac
   // BUG-04 FIX: Use networkidle instead of domcontentloaded.
   // ASP.NET WebForms attaches event listeners AFTER domcontentloaded.
   // Using domcontentloaded causes form fill/submit to fire before JS is ready.
-  await page.goto(NEWSPAGE_URL, { waitUntil: "networkidle" })
+  try {
+    // Timeout sering terjadi jika ada polling AJAX terus menerus di background.
+    // Kita biarkan time out, lalu biarkan page.fill menunggu field login muncul.
+    await page.goto(NEWSPAGE_URL, { waitUntil: "networkidle", timeout: 60000 })
+  } catch (err: any) {
+    if (err.message.includes("Timeout")) {
+      onProgress({ type: "log", message: "Timeout menunggu networkidle, mencoba paksa pengisian form..." })
+    } else {
+      throw err
+    }
+  }
 
   onProgress({ type: "log", message: "Mengisi kredensial..." })
   const finalUsername = creds.username.startsWith("NPSYS") ? creds.username : "NPSYS" + creds.username
@@ -631,6 +641,9 @@ export async function extractNewspageStock(
     onProgress({ type: "log", message: `Error: ${error.message}` })
     await closeBrowser(creds.username, true)
     throw error
+  } finally {
+    // Selalu tutup browser / turunkan refCount jika berhasil
+    await closeBrowser(creds.username)
   }
 }
 
@@ -737,10 +750,31 @@ export async function executeStockAdjustment(
       await waitForElement(page, "pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value", 20000)
       await page.waitForTimeout(300) // Kasih napas dikit sebelum ngetik SKU
 
-      // Input SKU dengan simulasi ketikan asli (pressSequentially) supaya semua event JS di webforms ketrigger
       const frame = await findFrame(page, "pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value")
+
+      // Cek dan handle popup peringatan (seperti peringatan item inactive) yang mungkin muncul dari baris sebelumnya
+      const isPopupVisible = await frame.evaluate(() => {
+        const bg = document.querySelector(".Popup_Background");
+        return bg && (bg as HTMLElement).offsetHeight > 0;
+      }).catch(() => false);
+
+      if (isPopupVisible) {
+        onProgress({ type: "log", message: "Popup peringatan terdeteksi, mengonfirmasi (Yes)..." })
+        await frame.evaluate(() => {
+          const yesBtns = document.querySelectorAll("[id$='pag_PopUp_YesNo_btn_Yes_Value']");
+          for (let i = 0; i < yesBtns.length; i++) {
+            if ((yesBtns[i] as HTMLElement).offsetHeight > 0) {
+              (yesBtns[i] as HTMLElement).click();
+              return;
+            }
+          }
+        }).catch(() => {});
+        await smartWait(page);
+      }
+
+      // Input SKU dengan simulasi ketikan asli (pressSequentially) supaya semua event JS di webforms ketrigger
       const skuInput = frame.locator("#pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value")
-      await skuInput.click()
+      await skuInput.click({ force: true }) // Gunakan force agar tidak tertahan kalau ada sisa overlay animasi
       await skuInput.fill("") // Clear dulu
       await skuInput.pressSequentially(row.sku, { delay: 10 })
       await page.waitForTimeout(100) // Kasih napas setelah ngetik SKU

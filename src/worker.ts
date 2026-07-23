@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq'
 import Redis from 'ioredis'
-import { executeStockAdjustment, BotProgressEvent } from './lib/newspage-bot'
+import { executeStockAdjustment, closeBrowser, BotProgressEvent } from './lib/newspage-bot'
 import { supabaseAdmin } from './lib/supabase'
 import { decrypt } from './lib/crypto'
 import dotenv from 'dotenv'
@@ -68,6 +68,9 @@ const worker = new Worker(
         onProgress
       )
 
+      // Kill browser setelah job selesai untuk free RAM di VPS
+      await closeBrowser(distributor.username, true).catch(() => {})
+
       // 6. Update status to COMPLETED
       await supabaseAdmin
         .from('jobs')
@@ -84,6 +87,9 @@ const worker = new Worker(
     } catch (error: any) {
       console.error(`[Job ${job.id}] Failed:`, error.message)
       
+      // Force close browser saat error — buang session stale agar job berikutnya fresh
+      await closeBrowser(distributorUsername, true).catch(() => {})
+
       // Update status to FAILED
       await supabaseAdmin
         .from('jobs')
