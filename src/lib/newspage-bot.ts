@@ -675,44 +675,56 @@ export async function extractNewspageStock(
       if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString("base64"), message: "Debug: form setelah File Type + Separator" })
     }
 
-    // ── Cari warehouse & status dari SEMUA discovered fields ──────────
-    // Gabung dari kedua scan (sebelum dan sesudah File Type)
+    // ── Cari warehouse & status dari grid DynamicFilter ──────────────
+    // Field warehouse ada di grid: grd_DynamicFilter, row ctl02
+    // Exact ID: pag_FW_SYS_INTF_JOB_DTL_PopupNew_grd_DynamicFilter_ctl02_dyn_Field_txt_Value
     const allDiscovered = dynFieldList2
 
     // Warehouse = warehouseCode (dari parameter, default GOOD_WHS)
-    // Dynamic discovery: cari field yang label mengandung "warehouse" atau "whs"
-    // Fallback ke broad selector kalau discovery gagal
     const wh = warehouseCode || "GOOD_WHS"
-    const whField = allDiscovered.find(f => 
-      f.type === "input" && (
-        f.label.toLowerCase().includes("warehouse") || 
-        f.label.toLowerCase().includes("whs") ||
-        f.label.toLowerCase().includes("gudang") ||
-        f.id.toLowerCase().includes("warehouse") ||
-        f.id.toLowerCase().includes("whs")
-      )
-    )
-    // Broader fallback: any input field with "dyn_Field" and "txt" in ID
-    const whFieldFallback = !whField ? allDiscovered.find(f => 
-      f.type === "input" && f.id.includes("dyn_Field") && f.id.includes("txt")
-    ) : null
-    const whFieldFinal = whField || whFieldFallback
+    const WAREHOUSE_EXACT_ID = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_grd_DynamicFilter_ctl02_dyn_Field_txt_Value"
     
-    if (!whFieldFinal) {
-      // Warehouse field genuinely not in this form — log and skip
-      onProgress({ type: "log", message: `WARNING: Warehouse field TIDAK ditemukan di form. ${allDiscovered.length} fields tersedia. Mungkin modul ini tidak support filter warehouse. SKIP warehouse filter.` })
+    let whFieldId: string | null = null
+    // Check exact ID exists in any frame
+    for (const frame of page.frames()) {
+      const found = await frame.evaluate((id) => !!document.getElementById(id), WAREHOUSE_EXACT_ID).catch(() => false)
+      if (found) { whFieldId = WAREHOUSE_EXACT_ID; break }
+    }
+    
+    if (whFieldId) {
+      onProgress({ type: "log", message: `Warehouse field via exact ID: ${whFieldId}` })
     } else {
-      const whSelector = `#${whFieldFinal.id}`
-      onProgress({ type: "log", message: `Warehouse field: "${whFieldFinal.label}" → ${whFieldFinal.id}` })
-      onProgress({ type: "log", message: `Menunggu field Warehouse muncul...` })
-      await waitForElement(page, whFieldFinal.id, TIMEOUT)
-      await smartWait(page, 500)
-      const frame = await findFrame(page, whFieldFinal.id)
-      const whLocator = frame.locator(whSelector)
-      const whEl = whLocator.first()
-      
+      // Fallback: scan grid rows for dyn_Field_txt
+      onProgress({ type: "log", message: "Exact warehouse ID gak ada, scan grid DynamicFilter..." })
+      for (const frame of page.frames()) {
+        const gridFields = await frame.evaluate(() => {
+          const r: string[] = []
+          document.querySelectorAll("[id*='grd_DynamicFilter'][id*='dyn_Field_txt']").forEach(el => { if (el.id) r.push(el.id) })
+          return r
+        }).catch(() => [])
+        if (gridFields.length > 0) {
+          whFieldId = gridFields[0]
+          onProgress({ type: "log", message: `Warehouse via grid scan: ${whFieldId} (${gridFields.length} candidates)` })
+          break
+        }
+      }
+    }
+
+    if (!whFieldId) {
+      const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
+      if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString("base64"), message: "Screenshot: warehouse not found" })
+      onProgress({ type: "log", message: `KRITIS: Warehouse field TIDAK ditemukan. IDs: ${allDiscovered.map(f => f.id).join(", ")}` })
+      throw new Error("Warehouse field tidak ditemukan. Job dibatalkan.")
+    }
+
+    onProgress({ type: "log", message: `Mengisi warehouse "${wh}" ke ${whFieldId}...` })
+    await waitForElement(page, whFieldId, TIMEOUT)
+    await smartWait(page, 500)
+    {
+      const frame = await findFrame(page, whFieldId!)
+      const whEl = frame.locator(`#${whFieldId}`)
       const currentWh = await whEl.inputValue()
-      onProgress({ type: "log", message: `Warehouse saat ini: "${currentWh}" → target: "${wh}"` })
+      onProgress({ type: "log", message: `Warehouse: "${currentWh}" → "${wh}"` })
       if (currentWh !== wh) {
         await whEl.fill(wh)
         await whEl.press("Tab")
@@ -722,45 +734,52 @@ export async function extractNewspageStock(
       if (verifyWh !== wh) {
         const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
         if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString("base64"), message: "Screenshot gagal set warehouse" })
-        throw new Error(`KRITIS: Gagal set Warehouse ke "${wh}". Field masih: "${verifyWh}". Job dibatalkan agar data BAD_WHS tidak ikut terexport.`)
+        throw new Error(`KRITIS: Warehouse masih "${verifyWh}", bukan "${wh}". Job dibatalkan.`)
       }
       onProgress({ type: "log", message: `Warehouse = "${verifyWh}" OK` })
     }
     
-    // Status = A (Active)
-    // Dynamic discovery: cari select field yang label mengandung "status"
-    const stField = allDiscovered.find(f => 
-      f.type === "select" && (
-        f.label.toLowerCase().includes("status") ||
-        f.id.toLowerCase().includes("status")
-      )
-    )
-    // Broader fallback: any select with "dyn_Field" and "drp" in ID
-    const stFieldFallback = !stField ? allDiscovered.find(f =>
-      f.type === "select" && f.id.includes("dyn_Field") && f.id.includes("drp")
-    ) : null
-    const stFieldFinal = stField || stFieldFallback
+    // Status = A (Active) — grid row ctl07
+    const STATUS_EXACT_ID = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_grd_DynamicFilter_ctl07_dyn_Field_drp_Value"
+    
+    let stFieldId: string | null = null
+    for (const frame of page.frames()) {
+      const found = await frame.evaluate((id) => !!document.getElementById(id), STATUS_EXACT_ID).catch(() => false)
+      if (found) { stFieldId = STATUS_EXACT_ID; break }
+    }
+    
+    if (!stFieldId) {
+      for (const frame of page.frames()) {
+        const gridSelects = await frame.evaluate(() => {
+          const r: string[] = []
+          document.querySelectorAll("[id*='grd_DynamicFilter'][id*='dyn_Field_drp']").forEach(el => { if (el.id) r.push(el.id) })
+          return r
+        }).catch(() => [])
+        if (gridSelects.length > 0) {
+          stFieldId = gridSelects[0]
+          onProgress({ type: "log", message: `Status via grid scan: ${stFieldId}` })
+          break
+        }
+      }
+    }
 
-    if (!stFieldFinal) {
-      onProgress({ type: "log", message: `WARNING: Status field TIDAK ditemukan di form. SKIP status filter.` })
+    if (!stFieldId) {
+      onProgress({ type: "log", message: `WARNING: Status field gak ada di grid. SKIP status filter.` })
     } else {
-      const stSelector = `#${stFieldFinal.id}`
-      onProgress({ type: "log", message: `Status field: "${stFieldFinal.label}" → ${stFieldFinal.id}` })
-      onProgress({ type: "log", message: "Menunggu field Status muncul..." })
-      await waitForElement(page, stFieldFinal.id, TIMEOUT)
+      onProgress({ type: "log", message: `Status field: ${stFieldId}` })
+      await waitForElement(page, stFieldId, TIMEOUT)
       await smartWait(page, 500)
-      const frame = await findFrame(page, stFieldFinal.id)
-      const st = frame.locator(stSelector).first()
-      
+      const frame = await findFrame(page, stFieldId)
+      const st = frame.locator(`#${stFieldId}`).first()
       const currentSt = await st.inputValue()
-      onProgress({ type: "log", message: `Status saat ini: "${currentSt}" → target: "A"` })
+      onProgress({ type: "log", message: `Status: "${currentSt}" → "A"` })
       if (currentSt !== "A") {
         await st.selectOption("A")
         await smartWait(page, 1500)
       }
       const verifySt = await st.inputValue()
       if (verifySt !== "A") {
-        onProgress({ type: "log", message: `WARNING: Gagal set Status ke "A". Masih: "${verifySt}".` })
+        onProgress({ type: "log", message: `WARNING: Status masih "${verifySt}".` })
       } else {
         onProgress({ type: "log", message: `Status = "${verifySt}" OK` })
       }
