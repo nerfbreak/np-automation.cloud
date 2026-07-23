@@ -407,6 +407,29 @@ async function logout(page: Page, onProgress: ProgressCallback): Promise<void> {
 // ═════════════════════════════════════════════════════════════════════════════
 // EXTRACT — Auto Compare Mode
 // ═════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
+// 🔒 LOCKED LOGIC — INVENTORY MASTER EXTRACTION
+// ═════════════════════════════════════════════════════════════════════════════
+// STATUS: PRODUCTION-VERIFIED ✅ (2026-07-23)
+// DO NOT MODIFY any code between this marker and the END LOCKED marker.
+//
+// This covers:
+//   1. extractNewspageStock() — login, create export job, download, parse
+//   2. Job creation flow — Add → Next → General config → Next → Disclaimer
+//   3. Interface ID selection — popup SelectButton → search → click result
+//   4. Dynamic fields — File Type (D), Separator (Tab), Warehouse (GOOD_WHS),
+//      Status (Active) — exact IDs from grd_DynamicFilter
+//   5. Add → Save → Run → poll job status → download CSV
+//   6. parseInventoryCsv() — header detection, column mapping, parsing
+//
+// WHY LOCKED:
+//   - GOOD_WHS filter confirmed working (BAD_WHS excluded from export)
+//   - Popup flow is the ONLY way to trigger server postback for dynamic fields
+//   - Direct fill INTF_ID + Tab does NOT render grd_DynamicFilter
+//   - Field IDs (ctl02, ctl07) match live Newspage portal structure
+//
+// If you need changes, create a SEPARATE function. Do not touch this one.
+// ═════════════════════════════════════════════════════════════════════════════
 export async function extractNewspageStock(
   creds: Credentials,
   warehouseCode: string,
@@ -782,6 +805,9 @@ function parseInventoryCsv(raw: string): ExtractedStockRow[] {
     }
   }).filter((r) => r.sku && r.sku !== "EOF")
 }
+// ═════════════════════════════════════════════════════════════════════════════
+// 🔒 END LOCKED LOGIC — INVENTORY MASTER EXTRACTION
+// ═════════════════════════════════════════════════════════════════════════════
 
 // ═════════════════════════════════════════════════════════════════════════════
 // EXECUTE — Stock Adjustment Injection
