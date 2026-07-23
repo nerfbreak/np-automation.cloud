@@ -518,10 +518,35 @@ export async function extractNewspageStock(
     await jsFill(page, intfIdField, "E_20150315090000028")
     const intfIdFrame = await findFrame(page, intfIdField)
     await intfIdFrame.press(`#${intfIdField}`, "Tab")
-    // INTF_ID Tab triggers heavy ASP.NET postback yang render semua dynamic fields
-    // (warehouse, status, dll). VPS lambat butuh waktu lebih lama.
-    onProgress({ type: "log", message: "Menunggu postback modul ekspor selesai (dynamic fields loading)..." })
-    await smartWait(page, 5000) // 5s tunggu postback render dynamic fields
+    // INTF_ID Tab triggers heavy ASP.NET postback yang render grid DynamicFilter
+    // (warehouse, status, dll). Grid bisa butuh 10-20 detik di VPS lambat.
+    // POLL sampai grid muncul, bukan fixed wait.
+    onProgress({ type: "log", message: "Menunggu grid DynamicFilter muncul setelah INTF_ID postback..." })
+    const GRID_POLL_TIMEOUT = 30000 // 30 detik max
+    const gridPollStart = Date.now()
+    let gridFound = false
+    while (Date.now() - gridPollStart < GRID_POLL_TIMEOUT) {
+      for (const frame of page.frames()) {
+        gridFound = await frame.evaluate(() => {
+          // Cek apakah grid DynamicFilter sudah di-render
+          const grid = document.querySelector("[id*='grd_DynamicFilter']")
+          if (!grid) return false
+          // Cek apakah ada input/select di dalam grid (bukan cuma header)
+          const inputs = grid.querySelectorAll("input, select")
+          return inputs.length > 0
+        }).catch(() => false)
+        if (gridFound) break
+      }
+      if (gridFound) break
+      await new Promise(r => setTimeout(r, 1000)) // poll setiap 1 detik
+    }
+    
+    if (gridFound) {
+      onProgress({ type: "log", message: `Grid DynamicFilter muncul setelah ${Math.round((Date.now() - gridPollStart) / 1000)}s` })
+    } else {
+      onProgress({ type: "log", message: `WARNING: Grid DynamicFilter belum muncul setelah ${GRID_POLL_TIMEOUT / 1000}s. Coba lanjut...` })
+    }
+    await smartWait(page, 1000) // Extra settle time setelah grid muncul
     onProgress({ type: "log", message: "Modul ekspor terkonfirmasi." })
 
     // ── Step 5b: Discover ALL form fields ───────────────────────────────
