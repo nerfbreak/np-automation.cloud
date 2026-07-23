@@ -47,33 +47,33 @@ export function MismatchTable({ rows }: MismatchTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>SKU</TableHead>
-            <TableHead>Nama Produk</TableHead>
-            <TableHead className="text-right">Stok Newspage</TableHead>
-            <TableHead className="text-right">Stok Distributor</TableHead>
-            <TableHead className="text-right">Selisih</TableHead>
+            <TableHead className="text-xs">SKU</TableHead>
+            <TableHead className="text-xs">Nama Produk</TableHead>
+            <TableHead className="text-right text-xs">Stok Newspage</TableHead>
+            <TableHead className="text-right text-xs">Stok Distributor</TableHead>
+            <TableHead className="text-right text-xs">Selisih</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {currentData.map((row) => (
             <TableRow key={row.sku}>
-              <TableCell className="font-mono text-sm">{row.sku}</TableCell>
-              <TableCell>{row.productName}</TableCell>
-              <TableCell className="text-right">{row.newspageQty.toLocaleString()}</TableCell>
-              <TableCell className="text-right">{row.distributorQty.toLocaleString()}</TableCell>
-              <TableCell className="text-right">
+              <TableCell className="font-mono text-xs">{row.sku}</TableCell>
+              <TableCell className="text-xs">{row.productName}</TableCell>
+              <TableCell className="text-right text-xs">{row.newspageQty.toLocaleString()}</TableCell>
+              <TableCell className="text-right text-xs">{row.distributorQty.toLocaleString()}</TableCell>
+              <TableCell className="text-right text-xs">
                 <div className="flex items-center justify-end gap-1">
                   {row.diff > 0 ? (
                     <>
-                      <TrendingUp className="h-3.5 w-3.5 text-[var(--success)]" />
-                      <Badge variant="secondary" className="text-[var(--success)] bg-[var(--success)]/10">
+                      <TrendingUp className="h-3 w-3 text-[var(--success)]" />
+                      <Badge variant="secondary" className="text-xs text-[var(--success)] bg-[var(--success)]/10">
                         +{row.diff}
                       </Badge>
                     </>
                   ) : (
                     <>
-                      <TrendingDown className="h-3.5 w-3.5 text-destructive" />
-                      <Badge variant="secondary" className="text-destructive bg-destructive/10">
+                      <TrendingDown className="h-3 w-3 text-destructive" />
+                      <Badge variant="secondary" className="text-xs text-destructive bg-destructive/10">
                         {row.diff}
                       </Badge>
                     </>
