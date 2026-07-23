@@ -810,7 +810,30 @@ function parseInventoryCsv(raw: string): ExtractedStockRow[] {
 // ═════════════════════════════════════════════════════════════════════════════
 
 // ═════════════════════════════════════════════════════════════════════════════
-// EXECUTE — Stock Adjustment Injection
+// 🔒 LOCKED LOGIC — STOCK ADJUSTMENT INJECTION
+// ═════════════════════════════════════════════════════════════════════════════
+// STATUS: PRODUCTION-VERIFIED ✅ (2026-07-23)
+// DO NOT MODIFY any code between this marker and the END LOCKED marker.
+//
+// This covers:
+//   1. executeStockAdjustment() — login, create SA doc, input SKUs, save, screenshot
+//   2. Stock Adjustment menu navigation (tab_Main_itm_StkAdj)
+//   3. New document creation (Add → Warehouse GOOD_WHS → Reason SA2)
+//   4. Per-SKU loop: fill SKU (pressSequentially) → Tab → wait QTY → fill QTY → remark → Add Item
+//   5. Popup handling (inactive item warnings → auto-confirm Yes)
+//   6. SKU rejection detection (empty field after Tab = invalid SKU)
+//   7. Save → confirmation popup → wait for List page return
+//   8. Auto-navigate to latest doc (sort TXN_NO desc → open first row)
+//   9. Final screenshot capture for proof
+//
+// WHY LOCKED:
+//   - pressSequentially with delay:10 is required — jsFill alone does NOT trigger ASP.NET events
+//   - Tab press triggers server postback to validate SKU and render QTY field
+//   - Popup_Background detection handles async server-side warnings between SKU entries
+//   - Save confirmation uses 60s timeout — large batch adjustments need this
+//   - Sort-by-TXN_NO trick reliably finds the just-created document
+//
+// If you need changes, create a SEPARATE function. Do not touch this one.
 // ═════════════════════════════════════════════════════════════════════════════
 export async function executeStockAdjustment(
   creds: Credentials,
@@ -988,3 +1011,6 @@ export async function executeStockAdjustment(
     await closeBrowser(creds.username)
   }
 }
+// ═════════════════════════════════════════════════════════════════════════════
+// 🔒 END LOCKED LOGIC — STOCK ADJUSTMENT INJECTION
+// ═════════════════════════════════════════════════════════════════════════════
