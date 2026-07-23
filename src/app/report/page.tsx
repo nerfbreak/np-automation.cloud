@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { DataTable } from "@/components/data-display/data-table";
+import { MetricCard } from "@/components/data-display/metric-card";
 import { StatusBadge } from "@/components/feedback/status-badge";
 import { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow, differenceInMinutes, differenceInSeconds } from "date-fns";
-import { Download, Copy, Eye, Image as ImageIcon } from "lucide-react";
+import { Download, Copy, Image as ImageIcon, CheckCircle2, XCircle, TrendingUp, FileText, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -14,6 +15,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { copyJobResultText, copyJobResultImage } from "@/lib/utils";
 
@@ -28,8 +32,10 @@ interface RealJob {
   updated_at: string;
 }
 
-export default function TasksPage() {
+export default function ReportPage() {
   const [jobs, setJobs] = useState<RealJob[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<string>("all");
 
   useEffect(() => {
     let isMounted = true;
@@ -44,6 +50,8 @@ export default function TasksPage() {
         }
       } catch (e) {
         console.error(e);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     };
     fetchJobs();
@@ -245,18 +253,117 @@ export default function TasksPage() {
     }
   ];
 
+  const completedCount = jobs.filter(j => j.status === "COMPLETED").length;
+  const failedCount = jobs.filter(j => j.status === "FAILED").length;
+  const successRate = jobs.length > 0 ? Math.round((completedCount / jobs.length) * 100) : 0;
+
+  const filteredJobs = activeTab === "all"
+    ? jobs
+    : activeTab === "completed"
+      ? jobs.filter(j => j.status === "COMPLETED")
+      : jobs.filter(j => j.status === "FAILED");
+
   return (
     <AppShell breadcrumbs={[{ label: "Report" }]}>
       <div className="flex flex-col gap-6">
+        {/* Header */}
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Jobs Report</h1>
           <p className="text-muted-foreground mt-2 text-sm">
             History of all completed and failed operations.
           </p>
         </div>
-        
-        <div className="mt-4">
-          <DataTable columns={columns} data={jobs} defaultPageSize={5} />
+
+        {/* Summary Cards */}
+        {isLoading ? (
+          <div className="grid gap-4 md:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i}>
+                <CardContent className="pt-4">
+                  <Skeleton className="h-4 w-24 mb-2" />
+                  <Skeleton className="h-8 w-12" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-4">
+            <MetricCard
+              title="Total Jobs"
+              value={jobs.length}
+              icon={<FileText className="h-4 w-4 text-sky-500" />}
+              className="bg-gradient-to-br from-card to-card/50 border-sky-900/20 shadow-sm"
+            />
+            <MetricCard
+              title="Completed"
+              value={completedCount}
+              icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+              className="bg-gradient-to-br from-card to-card/50 border-emerald-900/20 shadow-sm"
+            />
+            <MetricCard
+              title="Failed"
+              value={failedCount}
+              icon={<XCircle className="h-4 w-4 text-red-500" />}
+              className="bg-gradient-to-br from-card to-card/50 border-red-900/20 shadow-sm"
+            />
+            <MetricCard
+              title="Success Rate"
+              value={`${successRate}%`}
+              icon={<TrendingUp className="h-4 w-4 text-amber-500" />}
+              className="bg-gradient-to-br from-card to-card/50 border-amber-900/20 shadow-sm"
+            />
+          </div>
+        )}
+
+        {/* Tabs + Table */}
+        <div className="mt-2">
+          {isLoading ? (
+            <Card>
+              <CardContent className="py-8">
+                <div className="space-y-3">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              </CardContent>
+            </Card>
+          ) : jobs.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="rounded-full bg-muted p-4 mb-4">
+                  <Inbox className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold mb-1">No completed jobs yet</h3>
+                <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+                  Completed and failed jobs will appear here after processing.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Tabs defaultValue="all" onValueChange={setActiveTab}>
+              <TabsList>
+                <TabsTrigger value="all">
+                  All ({jobs.length})
+                </TabsTrigger>
+                <TabsTrigger value="completed">
+                  Completed ({completedCount})
+                </TabsTrigger>
+                <TabsTrigger value="failed">
+                  Failed ({failedCount})
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="all">
+                <DataTable columns={columns} data={filteredJobs} searchKey="distributor_username" searchPlaceholder="Search distributor..." defaultPageSize={10} />
+              </TabsContent>
+              <TabsContent value="completed">
+                <DataTable columns={columns} data={filteredJobs} searchKey="distributor_username" searchPlaceholder="Search distributor..." defaultPageSize={10} />
+              </TabsContent>
+              <TabsContent value="failed">
+                <DataTable columns={columns} data={filteredJobs} searchKey="distributor_username" searchPlaceholder="Search distributor..." defaultPageSize={10} />
+              </TabsContent>
+            </Tabs>
+          )}
         </div>
       </div>
     </AppShell>

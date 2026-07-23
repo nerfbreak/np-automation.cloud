@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { DataTable } from "@/components/data-display/data-table";
+import { MetricCard } from "@/components/data-display/metric-card";
 import { StatusBadge } from "@/components/feedback/status-badge";
 import { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow, differenceInMinutes, differenceInSeconds } from "date-fns";
-import { Download, Copy, Image as ImageIcon, Ban } from "lucide-react";
+import { Copy, Download, Image as ImageIcon, Ban, Clock, Play, Inbox, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -14,6 +15,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { copyJobResultText, copyJobResultImage } from "@/lib/utils";
 
@@ -30,8 +42,13 @@ interface RealJob {
 
 export default function TasksPage() {
   const [jobs, setJobs] = useState<RealJob[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [cancelJobId, setCancelJobId] = useState<string | null>(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   const handleCancelJob = async (jobId: string) => {
+    setCancelDialogOpen(false);
+    setCancelJobId(null);
     const toastId = toast.loading("Membatalkan task...");
     try {
       const res = await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
@@ -60,6 +77,8 @@ export default function TasksPage() {
         }
       } catch (e) {
         console.error(e);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     };
     fetchJobs();
@@ -69,6 +88,9 @@ export default function TasksPage() {
       clearInterval(interval);
     };
   }, []);
+
+  const pendingCount = jobs.filter(j => j.status === "PENDING").length;
+  const runningCount = jobs.filter(j => j.status === "RUNNING").length;
 
   const columns: ColumnDef<RealJob>[] = [
     {
@@ -162,7 +184,10 @@ export default function TasksPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleCancelJob(jobId)}
+                        onClick={() => {
+                          setCancelJobId(jobId);
+                          setCancelDialogOpen(true);
+                        }}
                         className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
                       >
                         <Ban className="h-3.5 w-3.5" />
@@ -286,20 +311,121 @@ export default function TasksPage() {
     }
   ];
 
+  const cancelTargetJob = cancelJobId ? jobs.find(j => j.job_id === cancelJobId) : null;
+
   return (
     <AppShell breadcrumbs={[{ label: "Tasks" }]}>
       <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Active Tasks</h1>
-          <p className="text-muted-foreground mt-2 text-sm">
-            Compact view of all running and pending operations.
-          </p>
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Active Tasks</h1>
+            <p className="text-muted-foreground mt-2 text-sm">
+              Compact view of all running and pending operations.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            Auto-refreshing
+          </div>
         </div>
-        
-        <div className="mt-4">
-          <DataTable columns={columns} data={jobs} defaultPageSize={5} />
+
+        {/* Summary Cards */}
+        {isLoading ? (
+          <div className="grid gap-4 md:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i}>
+                <CardContent className="pt-4">
+                  <Skeleton className="h-4 w-24 mb-2" />
+                  <Skeleton className="h-8 w-12" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-3">
+            <MetricCard
+              title="Total Active"
+              value={jobs.length}
+              icon={<RefreshCcw className="h-4 w-4 text-sky-500" />}
+              className="bg-gradient-to-br from-card to-card/50 border-sky-900/20 shadow-sm"
+            />
+            <MetricCard
+              title="Pending"
+              value={pendingCount}
+              icon={<Clock className="h-4 w-4 text-amber-500" />}
+              className="bg-gradient-to-br from-card to-card/50 border-amber-900/20 shadow-sm"
+            />
+            <MetricCard
+              title="Running"
+              value={runningCount}
+              icon={<Play className="h-4 w-4 text-emerald-500" />}
+              className="bg-gradient-to-br from-card to-card/50 border-emerald-900/20 shadow-sm"
+            />
+          </div>
+        )}
+
+        {/* Table or Empty State */}
+        <div className="mt-2">
+          {isLoading ? (
+            <Card>
+              <CardContent className="py-8">
+                <div className="space-y-3">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              </CardContent>
+            </Card>
+          ) : jobs.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="rounded-full bg-muted p-4 mb-4">
+                  <Inbox className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold mb-1">No active tasks</h3>
+                <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+                  All operations have completed. Start a new inventory adjustment to see tasks here.
+                </p>
+                <Button
+                  render={<a href="/inventory-adjustment" />}
+                >
+                  Start New Adjustment
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <DataTable columns={columns} data={jobs} defaultPageSize={5} />
+          )}
         </div>
       </div>
+
+      {/* Cancel Confirmation Dialog */}
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Batalkan Task?</DialogTitle>
+            <DialogDescription>
+              Task untuk <span className="font-medium text-foreground">{cancelTargetJob?.distributor_name || cancelTargetJob?.distributor_username}</span> akan dibatalkan. Aksi ini tidak bisa di-undo.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>
+              Kembali
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => cancelJobId && handleCancelJob(cancelJobId)}
+            >
+              <Ban className="h-4 w-4 mr-1" />
+              Ya, Batalkan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
