@@ -482,10 +482,14 @@ export async function extractNewspageStock(
     await waitForElement(page, "pag_FW_SYS_INTF_JOB_btn_Add_Value")
     await jsClick(page, "pag_FW_SYS_INTF_JOB_btn_Add_Value")
     await smartWait(page)
+    // 📸 Step 4a
+    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 4a: setelah klik Add" }) }
 
     await waitForElement(page, "pag_FW_SYS_INTF_JOB_RootNew_btn_Next_Value")
     await jsClick(page, "pag_FW_SYS_INTF_JOB_RootNew_btn_Next_Value")
     await smartWait(page)
+    // 📸 Step 4b
+    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 4b: setelah klik Next" }) }
 
     // ── Step 4: General configuration ────────────────────────────────────
     onProgress({ type: "log", message: "Konfigurasi: Type=E, Desc, Timeout, ExeType=M..." })
@@ -497,8 +501,12 @@ export async function extractNewspageStock(
     const timeoutFrame = await findFrame(page, "pag_FW_SYS_INTF_JOB_NewGeneral_JOB_TIMEOUT_Value")
     await timeoutFrame.press("#pag_FW_SYS_INTF_JOB_NewGeneral_JOB_TIMEOUT_Value", "Tab")
     await jsSelect(page, "pag_FW_SYS_INTF_JOB_NewGeneral_EXE_TYPE_Value", "M")
+    // 📸 Step 4c: General config done
+    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 4c: General config selesai, sebelum Next" }) }
     await jsClick(page, "pag_FW_SYS_INTF_JOB_RootNew_btn_Next_Value")
     await smartWait(page)
+    // 📸 Step 4d: After Next (should show interface detail form)
+    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 4d: setelah Next ke interface detail" }) }
 
     // ── Step 5: Disclaimer ────────────────────────────────────────────────
     try {
@@ -507,6 +515,8 @@ export async function extractNewspageStock(
       await jsClick(page, "pag_FW_DisclaimerMessage_btn_okay_Value")
       await smartWait(page)
     } catch { /* no disclaimer */ }
+    // 📸 Step 5a: After disclaimer
+    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5a: setelah disclaimer" }) }
 
     // ── Step 5: Interface ID — direct fill (BUG-05 FIX) ─────────────────
     // INTF_ID_SelectButton popup was REMOVED from Newspage portal (2026-07-12).
@@ -518,6 +528,8 @@ export async function extractNewspageStock(
     await jsFill(page, intfIdField, "E_20150315090000028")
     const intfIdFrame = await findFrame(page, intfIdField)
     await intfIdFrame.press(`#${intfIdField}`, "Tab")
+    // 📸 Step 5b: Right after INTF_ID Tab
+    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5b: right after INTF_ID Tab press" }) }
     // INTF_ID Tab triggers heavy ASP.NET postback yang render grid DynamicFilter
     // (warehouse, status, dll). Grid bisa butuh 10-20 detik di VPS lambat.
     // POLL sampai grid muncul, bukan fixed wait.
@@ -545,6 +557,28 @@ export async function extractNewspageStock(
       onProgress({ type: "log", message: `Grid DynamicFilter muncul setelah ${Math.round((Date.now() - gridPollStart) / 1000)}s` })
     } else {
       onProgress({ type: "log", message: `WARNING: Grid DynamicFilter belum muncul setelah ${GRID_POLL_TIMEOUT / 1000}s. Coba lanjut...` })
+    }
+    // 📸 Step 5c: After grid poll
+    { const ss = await page.screenshot({ fullPage: false }).catch(() => null); if (ss) onProgress({ type: "screenshot", screenshotBase64: ss.toString("base64"), message: "Step 5c: setelah grid poll (grid " + (gridFound ? "FOUND" : "NOT FOUND") + ")" }) }
+    
+    // Dump partial HTML dari form area — cari apakah grd_DynamicFilter ada tapi hidden
+    for (const frame of page.frames()) {
+      const htmlDump = await frame.evaluate(() => {
+        // Cari elemen yang ID-nya mengandung PopupNew (area form detail)
+        const containers = document.querySelectorAll("[id*='PopupNew'], [id*='DynamicFilter'], [id*='dyn_Field']")
+        if (containers.length === 0) return null
+        const ids = Array.from(containers).map(el => {
+          const tag = el.tagName.toLowerCase()
+          const id = el.id
+          const vis = (el as HTMLElement).offsetHeight > 0 ? "visible" : "hidden"
+          const childCount = el.children.length
+          return `<${tag} id="${id}" ${vis} children=${childCount}>`
+        })
+        return ids.join("\n")
+      }).catch(() => null)
+      if (htmlDump) {
+        onProgress({ type: "log", message: `HTML dump (frame): \n${htmlDump}` })
+      }
     }
     await smartWait(page, 1000) // Extra settle time setelah grid muncul
     onProgress({ type: "log", message: "Modul ekspor terkonfirmasi." })
