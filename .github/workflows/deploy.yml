@@ -9,6 +9,16 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Send start notification to Telegram
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            🚀 *Deploying np-automation...*
+            Commit: `${{ github.event.head_commit.message }}`
+            Author: `${{ github.event.head_commit.author.name }}`
+
       - name: SSH Deploy to VPS
         uses: appleboy/ssh-action@master
         with:
@@ -23,4 +33,24 @@ jobs:
             npm run build
             pm2 restart ecosystem.config.js
             echo "Deployment completed successfully!"
+
+      - name: Send success notification to Telegram
+        if: success()
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            ✅ *Deployment Successful!*
+            Aplikasi `np-automation` berhasil di-deploy ke VPS.
+
+      - name: Send failure notification to Telegram
+        if: failure()
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            ❌ *Deployment Failed!*
+            Deploy aplikasi `np-automation` gagal. Cek log GitHub Actions.
 
