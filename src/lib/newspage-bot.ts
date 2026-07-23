@@ -521,31 +521,37 @@ export async function extractNewspageStock(
     // INTF_ID Tab triggers heavy ASP.NET postback yang render semua dynamic fields
     // (warehouse, status, dll). VPS lambat butuh waktu lebih lama.
     onProgress({ type: "log", message: "Menunggu postback modul ekspor selesai (dynamic fields loading)..." })
-    await smartWait(page, 3000) // Tunggu postback render dynamic fields
+    await smartWait(page, 5000) // 5s tunggu postback render dynamic fields
     onProgress({ type: "log", message: "Modul ekspor terkonfirmasi." })
 
-    // ── Step 5b: Discover dynamic field IDs ─────────────────────────────
-    // ASP.NET WebForms generates dynamic IDs (_ctl02, _ctl03, dll) yang bisa
-    // berubah index tergantung form state. Scan semua field untuk cari yang benar.
-    onProgress({ type: "log", message: "Scanning dynamic fields di form..." })
-    let dynFieldMap: Record<string, { id: string, type: string, label: string }> = {}
-    for (const frame of page.frames()) {
-      const fields = await frame.evaluate(() => {
+    // ── Step 5b: Discover ALL form fields ───────────────────────────────
+    // Dump every input/select/textarea across all frames to find warehouse & status.
+    // ASP.NET WebForms IDs are unpredictable — we match by label text instead.
+    onProgress({ type: "log", message: "Scanning semua form fields di semua frames..." })
+    let dynFieldMap: Record<string, { id: string, type: string, label: string, frameIndex: number }> = {}
+    const allFrames = page.frames()
+    for (let fi = 0; fi < allFrames.length; fi++) {
+      const fields = await allFrames[fi].evaluate(() => {
         const result: Array<{ id: string, type: string, label: string }> = []
-        // Cari semua input/select yang ID-nya mengandung dyn_Field
-        const els = document.querySelectorAll("[id*='dyn_Field']")
+        // Scan ALL input, select, textarea — not just dyn_Field
+        const els = document.querySelectorAll("input, select, textarea")
         for (const el of els) {
           const id = el.id
           if (!id) continue
-          const type = el.tagName.toLowerCase() === "select" ? "select" : "input"
-          // Cari label: biasanya <span> atau <label> di row yang sama (parent TR)
+          // Skip hidden/system fields
+          const htmlEl = el as HTMLInputElement
+          if (htmlEl.type === "hidden") continue
+          const type = el.tagName.toLowerCase() === "select" ? "select" 
+                     : el.tagName.toLowerCase() === "textarea" ? "textarea" : "input"
+          // Cari label: span/label di parent TR, atau preceding sibling
           let label = ""
           const row = el.closest("tr")
           if (row) {
-            const spans = row.querySelectorAll("span")
+            const spans = row.querySelectorAll("span, label, td")
             for (const sp of spans) {
               const text = sp.textContent?.trim()
-              if (text && text.length > 1 && !text.startsWith("pag_")) {
+              if (text && text.length > 1 && text.length < 50 
+                  && !text.startsWith("pag_") && sp !== el && !sp.contains(el)) {
                 label = text
                 break
               }
@@ -557,12 +563,20 @@ export async function extractNewspageStock(
       }).catch(() => [])
 
       for (const f of fields) {
-        dynFieldMap[f.id] = f
+        dynFieldMap[f.id] = { ...f, frameIndex: fi }
       }
     }
 
     const dynFieldList = Object.values(dynFieldMap)
-    onProgress({ type: "log", message: `Ditemukan ${dynFieldList.length} dynamic fields: ${dynFieldList.map(f => `${f.label || "?"} → ${f.id} (${f.type})`).join(" | ")}` })
+    // Log all fields for debugging (truncate if too many)
+    const fieldsSummary = dynFieldList.map(f => `[F${f.frameIndex}] ${f.label || "?"} → ${f.id} (${f.type})`).join(" | ")
+    onProgress({ type: "log", message: `Ditemukan ${dynFieldList.length} form fields: ${fieldsSummary.substring(0, 2000)}` })
+
+    // Debug screenshot setelah INTF_ID postback — lihat state form saat ini
+    {
+      const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
+      if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString("base64"), message: "Debug: form state setelah INTF_ID postback" })
+    }
 
     // ── Step 6: File type, separator, warehouse, status ───────────────────
     // CRITICAL: Setiap field WAJIB berhasil di-set. Kalau gagal = job jalan
