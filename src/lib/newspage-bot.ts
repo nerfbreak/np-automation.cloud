@@ -50,10 +50,11 @@ const MAX_CONCURRENT_BROWSERS = parseInt(process.env.MAX_CONCURRENT_BROWSERS || 
 // Minimum free RAM sebelum boleh spawn browser baru (~500MB per Chromium instance)
 const MIN_FREE_RAM_MB = parseInt(process.env.MIN_FREE_RAM_MB || '700')
 interface BrowserInstance {
-  browser: Browser
   context: BrowserContext
   page: Page
   refCount: number
+  idleTimer?: NodeJS.Timeout
+  isClosed?: boolean
 }
 
 function getBrowserPool(): Map<string, BrowserInstance> {
@@ -74,10 +75,15 @@ async function getOrCreateBrowser(
   const existing = pool.get(username)
 
   // Reuse browser kalau masih hidup
-  if (existing && existing.browser.isConnected() && !existing.page.isClosed()) {
+  if (existing && !existing.isClosed && !existing.page.isClosed()) {
     existing.refCount++
+    if (existing.idleTimer) {
+      clearTimeout(existing.idleTimer)
+      existing.idleTimer = undefined
+    }
     console.log(`[Browser:${username}] Reuse session (ref: ${existing.refCount})`)
-    return { browser: existing.browser, context: existing.context, page: existing.page }
+    const browserObj = existing.context.browser() as Browser
+    return { browser: browserObj, context: existing.context, page: existing.page }
   }
 
   // Kalau pool sudah penuh ATAU RAM tidak cukup, masuk antrian
@@ -94,10 +100,17 @@ async function getOrCreateBrowser(
     onWaiting?.(position)
     await new Promise<void>(resolve => { queue.push({ resolve }) })
   }
-  // Buka browser baru untuk username ini
-  console.log(`[Browser:${username}] Membuka browser baru... (slot ${pool.size + 1}/${MAX_CONCURRENT_BROWSERS})`)
-  const browser = await chromium.launch({
-    headless: true,
+
+  // Gunakan persistent context agar cookies dan session persistent antar request / worker
+  const cleanUser = username.replace(/[^a-zA-Z0-9]/g, "_")
+  const userDataDir = path.join(os.tmpdir(), `playwright-profile-${cleanUser}`)
+
+  console.log(`[Browser:${username}] Membuka browser baru (Persistent: ${userDataDir})... (slot ${pool.size + 1}/${MAX_CONCURRENT_BROWSERS})`)
+  
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: HEADLESS,
+    viewport: { width: 1920, height: 1080 },
+    acceptDownloads: true,
     args: [
       "--remote-allow-origins=*",
       "--no-sandbox",
@@ -108,17 +121,19 @@ async function getOrCreateBrowser(
     ],
   })
 
-  const context = await browser.newContext({
-    viewport: { width: 1920, height: 1080 },
-    acceptDownloads: true,
-  })
-  const page = await context.newPage()
+  let page = context.pages()[0]
+  if (!page) {
+    page = await context.newPage()
+  }
+  
   page.setDefaultTimeout(TIMEOUT)
   page.setDefaultNavigationTimeout(TIMEOUT)
 
-  const instance: BrowserInstance = { browser, context, page, refCount: 1 }
+  const instance: BrowserInstance = { context, page, refCount: 1 }
   pool.set(username, instance)
-  return { browser, context, page }
+  
+  const browserObj = context.browser() as Browser
+  return { browser: browserObj, context, page }
 }
 
 export async function closeBrowser(username: string, force = false): Promise<void> {
@@ -132,15 +147,28 @@ export async function closeBrowser(username: string, force = false): Promise<voi
       console.log(`[Browser:${username}] masih dipakai (ref: ${instance.refCount}), skip close.`)
       return
     }
+
+    // Jangan langsung close, pakai idleTimeout 10 menit agar browser reusable di request berikutnya
+    if (instance.idleTimer) clearTimeout(instance.idleTimer)
+    console.log(`[Browser:${username}] Masuk masa standby. Browser standby 10 menit.`)
+    instance.idleTimer = setTimeout(async () => {
+      console.log(`[Browser:${username}] Menutup browser otomatis karena idle 10 menit...`)
+      await closeBrowser(username, true)
+    }, 10 * 60 * 1000)
+    return
   } else {
     console.log(`[Browser:${username}] Force close! Session stale di-reset.`)
+    if (instance.idleTimer) {
+      clearTimeout(instance.idleTimer)
+      instance.idleTimer = undefined
+    }
     instance.refCount = 0
+    instance.isClosed = true
   }
 
   try {
     await instance.page.close().catch(() => {})
     await instance.context.close().catch(() => {})
-    await instance.browser.close()
     console.log(`[Browser:${username}] Closed. RAM freed.`)
   } catch (e) {
     console.error(`[Browser:${username}] Failed to close gracefully:`, e)
@@ -148,234 +176,42 @@ export async function closeBrowser(username: string, force = false): Promise<voi
     // Force-kill semua child process Chromium (gpu-process, renderer, dll)
     // kalau browser.close() tidak cascade dengan benar
     try {
-      ;(instance.browser as any).process()?.kill('SIGKILL')
-    } catch { /* already dead */ }
-  }
-  pool.delete(username)
-  console.log(`[Browser:${username}] Removed from pool. Active: ${pool.size}/${MAX_CONCURRENT_BROWSERS}`)
-
-  // Notif antrian berikutnya kalau ada slot kosong
-  const queue = getWaitQueue()
-  if (queue.length > 0 && pool.size < MAX_CONCURRENT_BROWSERS) {
-    console.log(`[Browser] Slot freed, notifying queue (${queue.length} waiting)`)
-    const next = queue.shift()!
-    next.resolve()
-  }
-}
-
-/** Cek apakah browser untuk username tertentu sedang dipakai */
-export function isBrowserBusy(username: string): boolean {
-  const pool = getBrowserPool()
-  const instance = pool.get(username)
-  return instance ? instance.refCount > 0 : false
-}
-
-/**
- * findFrame — search all frames (main + iframes) for an element by ID or CSS selector.
- * Newspage loads its content in nested iframes.
- */
-async function findFrame(page: Page, selectorOrId: string): Promise<Frame> {
-  for (const frame of page.frames()) {
-    const found = await frame.evaluate(
-      (sel) => {
-        let cssSel = sel;
-        if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
-          cssSel = `[id='${sel}']`;
-        }
-        const els = document.querySelectorAll(cssSel);
-        for (let i = els.length - 1; i >= 0; i--) {
-          if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) return true;
-        }
-        return els.length > 0;
-      },
-      selectorOrId
-    ).catch(() => false)
-    if (found) return frame
-  }
-  throw new Error(`Element not found in any frame: ${selectorOrId}`)
-}
-
-/** jsClick — fire click via native browser events (focus, mousedown, click) to ensure all WebForms handlers execute */
-async function jsClick(page: Page, selectorOrId: string): Promise<void> {
-  await waitForElement(page, selectorOrId) // Tunggu elemen muncul dulu (penting di VPS yang lebih lambat)
-  const frame = await findFrame(page, selectorOrId)
-  await frame.evaluate((sel) => {
-    let cssSel = sel;
-    if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
-      cssSel = `[id='${sel}']`;
-    }
-    let el: Element | null = null;
-    const els = document.querySelectorAll(cssSel);
-    for (let i = els.length - 1; i >= 0; i--) {
-      if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i]; break; }
-    }
-    if (!el && els.length > 0) el = els[els.length - 1];
-    if (el && el instanceof HTMLElement) {
-      el.focus() // Wajib untuk WebForms: set SYS_activeElementId
-      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) // Eksekusi appendDelayCall() kalau ada di onmousedown
-      el.click() // Eksekusi postback
-    }
-    else throw new Error(`Element ${sel} disappeared before click`)
-  }, selectorOrId)
-}
-
-/** jsSelect — set select value + dispatch change, searches all frames */
-async function jsSelect(page: Page, selectorOrId: string, value: string): Promise<void> {
-  const frame = await findFrame(page, selectorOrId)
-  await frame.evaluate(({ sel, val }) => {
-    let cssSel = sel;
-    if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
-      cssSel = `[id='${sel}']`;
-    }
-    let el: HTMLSelectElement | null = null;
-    const els = document.querySelectorAll(cssSel);
-    for (let i = els.length - 1; i >= 0; i--) {
-      if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLSelectElement; break; }
-    }
-    if (!el && els.length > 0) el = els[els.length - 1] as HTMLSelectElement;
-    if (!el) throw new Error(`${sel} disappeared`)
-    el.value = val
-    el.dispatchEvent(new Event("change", { bubbles: true }))
-  }, { sel: selectorOrId, val: value })
-}
-
-/** jsFill — set input value + dispatch events, searches all frames */
-async function jsFill(page: Page, selectorOrId: string, value: string): Promise<void> {
-  const frame = await findFrame(page, selectorOrId)
-  await frame.evaluate(({ sel, val }) => {
-    let cssSel = sel;
-    if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
-      cssSel = `[id='${sel}']`;
-    }
-    let el: HTMLInputElement | null = null;
-    const els = document.querySelectorAll(cssSel);
-    for (let i = els.length - 1; i >= 0; i--) {
-      if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLInputElement; break; }
-    }
-    if (!el && els.length > 0) el = els[els.length - 1] as HTMLInputElement;
-    if (!el) throw new Error(`${sel} disappeared`)
-    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-    nativeSetter?.call(el, val)
-    el.dispatchEvent(new Event("input", { bubbles: true }))
-    el.dispatchEvent(new Event("change", { bubbles: true }))
-  }, { sel: selectorOrId, val: value })
-}
-
-/** jsCheck — check a checkbox via JS, searches all frames */
-async function jsCheck(page: Page, selectorOrId: string): Promise<void> {
-  const frame = await findFrame(page, selectorOrId)
-  await frame.evaluate((sel) => {
-    let cssSel = sel;
-    if (!sel.includes('[') && !sel.includes('.') && !sel.includes('#') && !sel.includes('>')) {
-      cssSel = `[id='${sel}']`;
-    }
-    let el: HTMLInputElement | null = null;
-    const els = document.querySelectorAll(cssSel);
-    for (let i = els.length - 1; i >= 0; i--) {
-      if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) { el = els[i] as HTMLInputElement; break; }
-    }
-    if (!el && els.length > 0) el = els[els.length - 1] as HTMLInputElement;
-    if (!el) throw new Error(`${sel} disappeared`);
-    if (!el.checked) {
-      el.checked = true
-      el.dispatchEvent(new Event("change", { bubbles: true }))
-    }
-  }, selectorOrId)
-}
-
-/** 
- * Smart wait khusus untuk portal ASP.NET legacy: 
- * Menunggu network idle, load state, dan memberi jeda ekstra untuk memastikan UpdatePanel selesai me-render DOM.
- */
-async function smartWait(page: Page, extraDelay = 250) {
-  // Tunggu sejenak memberi waktu bagi JS onclick handlers untuk nge-trigger 
-  // XMLHttpRequest/UpdatePanel postback sebelum kita nge-cek statusnya.
-  await page.waitForTimeout(500)
-  
-  await page.waitForLoadState("domcontentloaded").catch(() => {})
-  await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {})
-  
-  // Custom polling: Tunggu sampai semua frame bener-bener ready dan gak ada AJAX postback ASP.NET yang jalan
-  const start = Date.now()
-  while (Date.now() - start < 30000) {
-    let isBusy = false
-    for (const frame of page.frames()) {
-      const busy = await frame.evaluate(() => {
-        if (document.readyState !== 'complete') return true
-        
-        // Cek ASP.NET AJAX UpdatePanel state
-        const sys = (window as any).Sys
-        if (typeof sys !== 'undefined' && sys.WebForms && sys.WebForms.PageRequestManager) {
-          const prm = sys.WebForms.PageRequestManager.getInstance()
-          if (prm && prm.get_isInAsyncPostBack()) return true
-        }
-        return false
-      }).catch((e: Error) => {
-        // If the frame is navigating or destroyed, consider it BUSY.
-        // If it's a cross-origin error, ignore it.
-        if (e.message.includes('Execution context was destroyed') || e.message.includes('navigating')) return true;
-        return false;
-      })
-      
-      if (busy) {
-        isBusy = true
-        break
+      if (process.platform === "win32") {
+        // Di Windows, bunuh task chromium (karena default context close tidak selalu membunuh proses tersesat)
+        // tapi kita biarkan dulu atau tangani secara opsional agar tidak mematikan browser lain
+      } else {
+        // Di Linux (VPS production), kita bisa jalankan cleanup pkill jika dibutuhkan, tapi command ini opsional
       }
-    }
-    
-    if (!isBusy) break
-    await new Promise(r => setTimeout(r, 500))
+    } catch { /* ignore */ }
   }
-
-  // Delay fisik karena JavaScript UpdatePanel (UpdateProgress) kadang butuh waktu ekstra untuk me-replace DOM setelah request selesai
-  await page.waitForTimeout(extraDelay)
 }
-
-/** waitForElement — poll all frames until element appears, with timeout */
-async function waitForElement(page: Page, selectorOrId: string, timeoutMs = TIMEOUT): Promise<void> {
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    for (const frame of page.frames()) {
-      const found = await frame.evaluate((sel) => {
-        const isSel = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
-        if (!isSel) return !!document.getElementById(sel);
-        const els = document.querySelectorAll(sel);
-        for (let i = els.length - 1; i >= 0; i--) {
-          if ((els[i] as HTMLElement).offsetHeight > 0 || (els[i] as HTMLElement).offsetWidth > 0) return true;
-        }
-        return els.length > 0;
-      }, selectorOrId).catch(() => false)
-      if (found) return
-    }
-    await new Promise((r) => setTimeout(r, 500))
-  }
-  throw new Error(`Timeout waiting for element: ${selectorOrId}`)
-}
-
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 async function login(page: Page, creds: Credentials, onProgress: ProgressCallback): Promise<void> {
-  // Check if we are already logged in (singleton browser session)
+  onProgress({ type: "log", message: "Membuka portal Newspage..." })
+  try {
+    await page.goto(NEWSPAGE_URL, { waitUntil: "networkidle", timeout: 45000 }).catch(() => {})
+  } catch (err: any) {
+    onProgress({ type: "log", message: "Koneksi portal lambat, melanjutkan pengisian form..." })
+  }
+
+  // Jika session cookie persistent masih aktif, web akan langsung me-redirect ke Dashboard / Default.aspx
   const currentUrl = page.url()
   if (currentUrl && currentUrl.includes(NEWSPAGE_URL.split("/")[2]) && !currentUrl.includes("Logon.aspx") && !currentUrl.includes("about:blank")) {
-    onProgress({ type: "log", message: "Sesi browser masih aktif, melanjutkan tanpa login ulang..." })
+    onProgress({ type: "log", message: "Sesi cookie aktif terdeteksi. Melanjutkan..." })
     return
   }
 
-  onProgress({ type: "log", message: "Membuka portal Newspage..." })
-  // BUG-04 FIX: Use networkidle instead of domcontentloaded.
-  // ASP.NET WebForms attaches event listeners AFTER domcontentloaded.
-  // Using domcontentloaded causes form fill/submit to fire before JS is ready.
-  try {
-    // Timeout sering terjadi jika ada polling AJAX terus menerus di background.
-    // Kita biarkan time out, lalu biarkan page.fill menunggu field login muncul.
-    await page.goto(NEWSPAGE_URL, { waitUntil: "networkidle", timeout: 60000 })
-  } catch (err: any) {
-    if (err.message.includes("Timeout")) {
-      onProgress({ type: "log", message: "Timeout menunggu networkidle, mencoba paksa pengisian form..." })
-    } else {
-      throw err
+  // Tunggu form login muncul jika belum masuk dashboard
+  const isLoginFormVisible = await page.locator("#txtUserid").isVisible().catch(() => false)
+  if (!isLoginFormVisible) {
+    // Jika tidak ada di login form dan URL tidak mengandung Logon.aspx, wajar jika sudah di Dashboard
+    if (!page.url().includes("Logon.aspx") && page.url().includes(NEWSPAGE_URL.split("/")[2])) {
+      onProgress({ type: "log", message: "Bypass login (sudah berada di Dashboard)..." })
+      return
     }
+    // Tunggu manual
+    await page.waitForSelector("#txtUserid", { timeout: 15000 }).catch(() => {})
   }
 
   onProgress({ type: "log", message: "Mengisi kredensial..." })
@@ -458,18 +294,13 @@ export async function extractNewspageStock(
       try {
         const frame = await findFrame(page, frameNavId)
         
-        // Coba Playwright native hover dulu
-        await frame.locator(frameNavId).hover({ force: true, timeout: 5000 }).catch(async (err) => {
-          // Fallback ke JS Events kalau native hover ditolak/gagal
-          console.warn(`Native hover gagal, mencoba JS events... Error: ${err.message}`)
-          await frame.evaluate((sel) => {
-            const isSelector = sel.includes('[') || sel.includes('.') || sel.includes('#') || sel.includes('>');
-            const el = isSelector ? document.querySelector(sel) : document.getElementById(sel)
-            if (el) {
-              el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
-              el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
-            }
-          }, frameNavId)
+        // Pake JS Events langsung agar log mulus tanpa strict mode warning
+        await frame.evaluate(() => {
+          const el = document.querySelector("a.Tab_TabItem[id$='_SysAdminSetup']")
+          if (el) {
+            el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+            el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+          }
         })
         
         await smartWait(page, attempt * 1000) // 1s → 2s → 3s

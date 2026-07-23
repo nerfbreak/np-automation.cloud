@@ -25,6 +25,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { copyJobResultText, copyJobResultImage } from "@/lib/utils";
@@ -45,6 +46,7 @@ export default function TasksPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [cancelJobId, setCancelJobId] = useState<string | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("all");
 
   const handleCancelJob = async (jobId: string) => {
     setCancelDialogOpen(false);
@@ -92,6 +94,12 @@ export default function TasksPage() {
   const pendingCount = jobs.filter(j => j.status === "PENDING").length;
   const runningCount = jobs.filter(j => j.status === "RUNNING").length;
 
+  const filteredJobs = activeTab === "all"
+    ? jobs
+    : activeTab === "pending"
+      ? jobs.filter(j => j.status === "PENDING")
+      : jobs.filter(j => j.status === "RUNNING");
+
   const columns: ColumnDef<RealJob>[] = [
     {
       accessorKey: "distributor_username",
@@ -99,9 +107,18 @@ export default function TasksPage() {
       cell: ({ row }) => {
         const name = row.original.distributor_name || row.getValue("distributor_username") as string;
         return (
-          <div className="text-sm font-medium truncate max-w-[300px]" title={name}>
-            {name}
-          </div>
+          <TooltipProvider delay={300}>
+            <Tooltip>
+              <TooltipTrigger>
+                <div className="font-medium text-sm truncate max-w-[350px]">
+                  {name}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start">
+                <p>{name}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         );
       }
     },
@@ -109,12 +126,16 @@ export default function TasksPage() {
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => (
-        <div className="flex flex-col items-start gap-1">
-          <StatusBadge status={row.getValue("status")} />
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {formatDistanceToNow(new Date(row.original.created_at), { addSuffix: true })}
-          </span>
-        </div>
+        <StatusBadge status={row.getValue("status")} />
+      ),
+    },
+    {
+      id: "time",
+      header: "Time",
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {formatDistanceToNow(new Date(row.original.created_at), { addSuffix: true })}
+        </span>
       ),
     },
     {
@@ -186,7 +207,7 @@ export default function TasksPage() {
                       </Button>
                     }
                   />
-                  <TooltipContent>Cancel Task</TooltipContent>
+                  <TooltipContent side="bottom" align="end">Cancel Task</TooltipContent>
                 </Tooltip>
               </div>
             </TooltipProvider>
@@ -359,7 +380,7 @@ export default function TasksPage() {
           </div>
         )}
 
-        {/* Table or Empty State */}
+        {/* Tabs + Table */}
         <div className="mt-2">
           {isLoading ? (
             <Card>
@@ -389,7 +410,28 @@ export default function TasksPage() {
               </CardContent>
             </Card>
           ) : (
-            <DataTable columns={columns} data={jobs} defaultPageSize={5} />
+            <Tabs defaultValue="all" onValueChange={setActiveTab}>
+              <TabsList>
+                <TabsTrigger value="all">
+                  All ({jobs.length})
+                </TabsTrigger>
+                <TabsTrigger value="pending">
+                  Pending ({pendingCount})
+                </TabsTrigger>
+                <TabsTrigger value="running">
+                  Running ({runningCount})
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="all">
+                <DataTable columns={columns} data={filteredJobs} searchKey="distributor_username" searchPlaceholder="Search distributor..." defaultPageSize={10} />
+              </TabsContent>
+              <TabsContent value="pending">
+                <DataTable columns={columns} data={filteredJobs} searchKey="distributor_username" searchPlaceholder="Search distributor..." defaultPageSize={10} />
+              </TabsContent>
+              <TabsContent value="running">
+                <DataTable columns={columns} data={filteredJobs} searchKey="distributor_username" searchPlaceholder="Search distributor..." defaultPageSize={10} />
+              </TabsContent>
+            </Tabs>
           )}
         </div>
       </div>
