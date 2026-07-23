@@ -524,66 +524,110 @@ export async function extractNewspageStock(
 
 
     // ── Step 6: File type, separator, warehouse, status ───────────────────
+    // CRITICAL: Setiap field WAJIB berhasil di-set. Kalau gagal = job jalan
+    // tanpa filter → data BAD_WHS ikut tereksport.
+    // Setiap field: waitForElement → set value → smartWait → verifikasi value.
     onProgress({ type: "log", message: "Konfigurasi file type, separator, warehouse, status..." })
     
-    // File Type = D
+    // File Type = D (Download)
     const fileTypeId = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_FILE_TYPE_Value"
-    try {
-      await waitForElement(page, fileTypeId)
+    onProgress({ type: "log", message: "Menunggu field File Type muncul..." })
+    await waitForElement(page, fileTypeId, TIMEOUT)
+    await smartWait(page, 500) // Biarkan form fully rendered
+    {
       const frame = await findFrame(page, fileTypeId)
       const ft = frame.locator(`#${fileTypeId}`)
       const currentFt = await ft.inputValue()
       if (currentFt !== "D") {
+        onProgress({ type: "log", message: `File Type saat ini: "${currentFt}" → ubah ke "D"` })
         await ft.selectOption("D")
-        await smartWait(page, 2000)
+        await smartWait(page, 2000) // ASP.NET postback setelah change
       }
-    } catch { }
+      // Verifikasi
+      const verifyFt = await ft.inputValue()
+      if (verifyFt !== "D") {
+        throw new Error(`Gagal set File Type ke "D". Masih: "${verifyFt}"`)
+      }
+      onProgress({ type: "log", message: `File Type = "${verifyFt}" OK` })
+    }
     
-    // Separator = 9 (Tab)
+    // Separator = Tab (radio button index 0)
     const separatorId = "pag_FW_SYS_INTF_JOB_DTL_PopupNew_FLD_SEPARATOR_STD_Value_0"
-    try {
-      await waitForElement(page, separatorId, 5000)
+    onProgress({ type: "log", message: "Menunggu field Separator muncul..." })
+    await waitForElement(page, separatorId, TIMEOUT)
+    await smartWait(page, 500)
+    {
       const frame = await findFrame(page, separatorId)
       const sep = frame.locator(`#${separatorId}`)
       const isChecked = await sep.isChecked()
       if (!isChecked) {
+        onProgress({ type: "log", message: "Separator belum Tab — klik radio button..." })
         await sep.check()
         await smartWait(page, 1500)
       }
-    } catch { }
+      // Verifikasi
+      const verifySep = await sep.isChecked()
+      if (!verifySep) {
+        throw new Error("Gagal set Separator ke Tab. Radio button masih unchecked.")
+      }
+      onProgress({ type: "log", message: "Separator = Tab OK" })
+    }
 
-    // Warehouse = GOOD_WHS
-    const wh = "GOOD_WHS"
-    // BUG-M04 FIX: whInputId is already a CSS selector (id$=...), so use it directly
-    // in frame.locator(). The old code did frame.locator(`#${whInputId}`) which produced
-    // the invalid selector `#[id$='...']`. Drop the `#` prefix.
+    // Warehouse = warehouseCode (dari parameter, default GOOD_WHS)
+    // BUG-M04 FIX: whInputId is CSS selector (id$=...), jangan prefix #
+    const wh = warehouseCode || "GOOD_WHS"
     const whInputId = "[id$='_ctl02_dyn_Field_txt_Value']"
-    try {
-      await waitForElement(page, whInputId, 5000)
+    onProgress({ type: "log", message: `Menunggu field Warehouse muncul...` })
+    await waitForElement(page, whInputId, TIMEOUT)
+    await smartWait(page, 500)
+    {
       const frame = await findFrame(page, whInputId)
-      const whLocator = frame.locator(whInputId) // ← no # prefix — whInputId is already a CSS selector
+      const whLocator = frame.locator(whInputId) // No # prefix — already CSS selector
       
       const currentWh = await whLocator.inputValue()
+      onProgress({ type: "log", message: `Warehouse saat ini: "${currentWh}" → target: "${wh}"` })
       if (currentWh !== wh) {
         await whLocator.fill(wh)
-        await whLocator.press("Tab")
-        await smartWait(page, 1500)
+        await whLocator.press("Tab") // Trigger ASP.NET AutoPostBack validation
+        await smartWait(page, 2000) // Tunggu postback selesai
       }
-    } catch { }
+      // Verifikasi — WAJIB cocok, kalau tidak data BAD_WHS ikut terexport
+      const verifyWh = await whLocator.inputValue()
+      if (verifyWh !== wh) {
+        const ssBuffer = await page.screenshot({ fullPage: false }).catch(() => null)
+        if (ssBuffer) onProgress({ type: "screenshot", screenshotBase64: ssBuffer.toString("base64"), message: "Screenshot gagal set warehouse" })
+        throw new Error(`KRITIS: Gagal set Warehouse ke "${wh}". Field masih: "${verifyWh}". Job dibatalkan agar data BAD_WHS tidak ikut terexport.`)
+      }
+      onProgress({ type: "log", message: `Warehouse = "${verifyWh}" OK` })
+    }
     
-    // Status = A
+    // Status = A (Active)
+    // BUG FIX: statusId is CSS selector (id$=...), jangan prefix #
     const statusId = "[id$='_ctl07_dyn_Field_drp_Value']"
-    try {
+    onProgress({ type: "log", message: "Menunggu field Status muncul..." })
+    await waitForElement(page, statusId, TIMEOUT)
+    await smartWait(page, 500)
+    {
       const frame = await findFrame(page, statusId)
-      const st = frame.locator(`#${statusId}`)
+      const st = frame.locator(statusId) // No # prefix — already CSS selector
       
       const currentSt = await st.inputValue()
+      onProgress({ type: "log", message: `Status saat ini: "${currentSt}" → target: "A"` })
       if (currentSt !== "A") {
         await st.selectOption("A")
         await smartWait(page, 1500)
       }
-    } catch { }
+      // Verifikasi
+      const verifySt = await st.inputValue()
+      if (verifySt !== "A") {
+        onProgress({ type: "log", message: `WARNING: Gagal set Status ke "A". Masih: "${verifySt}". Lanjut dengan status default.` })
+      } else {
+        onProgress({ type: "log", message: `Status = "${verifySt}" OK` })
+      }
+    }
 
+    onProgress({ type: "log", message: "Semua field terkonfigurasi. Klik Add..." })
+    await waitForElement(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_btn_Add_Value", TIMEOUT)
     await jsClick(page, "pag_FW_SYS_INTF_JOB_DTL_PopupNew_btn_Add_Value")
     await smartWait(page)
 
