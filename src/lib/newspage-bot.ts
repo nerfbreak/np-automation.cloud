@@ -5,7 +5,7 @@ import * as os from "os"
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const NEWSPAGE_URL = process.env.NEWSPAGE_URL!
-const HEADLESS = true // toggle via PLAYWRIGHT_HEADLESS env when stable
+const HEADLESS = process.env.PLAYWRIGHT_HEADLESS !== "false"
 const TIMEOUT = parseInt(process.env.PLAYWRIGHT_TIMEOUT_MS ?? "60000")
 
 export interface Credentials {
