@@ -72,7 +72,7 @@ export default function ReportPage() {
           <TooltipProvider delay={300}>
             <Tooltip>
               <TooltipTrigger>
-                <div className="font-medium text-sm truncate max-w-[350px]">
+                <div className="font-medium text-sm truncate max-w-[140px]">
                   {name}
                 </div>
               </TooltipTrigger>
@@ -129,7 +129,7 @@ export default function ReportPage() {
           <TooltipProvider delay={300}>
             <Tooltip>
               <TooltipTrigger>
-                <div className="text-sm max-w-[300px] truncate">
+                <div className="text-sm max-w-[140px] truncate">
                   {summary || "-"}
                 </div>
               </TooltipTrigger>

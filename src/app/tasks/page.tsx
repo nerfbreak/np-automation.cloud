@@ -110,7 +110,7 @@ export default function TasksPage() {
           <TooltipProvider delay={300}>
             <Tooltip>
               <TooltipTrigger>
-                <div className="font-medium text-sm truncate max-w-[280px]">
+                <div className="font-medium text-sm truncate max-w-[140px]">
                   {name}
                 </div>
               </TooltipTrigger>
@@ -167,7 +167,7 @@ export default function TasksPage() {
           <TooltipProvider delay={300}>
             <Tooltip>
               <TooltipTrigger>
-                <div className="text-sm max-w-[300px] truncate">
+                <div className="text-sm max-w-[140px] truncate">
                   {summary || "-"}
                 </div>
               </TooltipTrigger>
