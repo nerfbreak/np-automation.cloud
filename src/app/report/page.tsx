@@ -167,7 +167,7 @@ export default function ReportPage() {
                             rel="noreferrer"
                           />
                         }
-                        className="h-7 w-7 text-primary hover:bg-primary/10 hover:text-primary"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
                       >
                         <Download className="h-3.5 w-3.5" />
                         <span className="sr-only">Unduh Bukti</span>
@@ -183,7 +183,7 @@ export default function ReportPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
                         onClick={async () => {
                           const toastId = toast.loading("Menyalin gambar...");
                           const result = await copyJobResultImage(jobId);
@@ -215,7 +215,7 @@ export default function ReportPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
                         onClick={async () => {
                           const summary = row.getValue("result_summary") as string || "";
                           const distributorUsername = row.original.distributor_username;

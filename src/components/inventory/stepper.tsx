@@ -15,20 +15,29 @@ interface StepperProps {
 }
 
 export function Stepper({ steps, currentStep, className }: StepperProps) {
+  const percentage = Math.round((currentStep / steps.length) * 100)
+
   return (
     <div className={cn("w-full py-4 px-1", className)}>
-      {/* Mobile view: compact active step text */}
-      <div className="flex flex-col md:hidden items-center justify-center mb-6">
-        <span className="text-xs font-bold uppercase tracking-wider text-primary/80">
-          Langkah {currentStep} dari {steps.length}
-        </span>
-        <span className="text-lg font-extrabold text-foreground mt-0.5">
+      {/* Mobile view: compact active step text with progress bar */}
+      <div className="flex flex-col md:hidden w-full px-2 mb-6">
+        <div className="flex justify-between items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+          <span>Langkah {currentStep} dari {steps.length}</span>
+          <span className="text-primary font-bold">{percentage}%</span>
+        </div>
+        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mb-2">
+          <div 
+            className="bg-primary h-full transition-all duration-300" 
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+        <span className="text-base font-bold text-foreground mt-1">
           {steps[currentStep - 1]?.label}
         </span>
       </div>
 
-      {/* Steps Indicator Container */}
-      <div className="flex items-center justify-between w-full relative">
+      {/* Steps Indicator Container (Desktop only) */}
+      <div className="hidden md:flex items-center justify-between w-full relative">
         {/* Progress Line Container */}
         <div 
           className="absolute top-4 h-0.5 -translate-y-1/2 z-0"

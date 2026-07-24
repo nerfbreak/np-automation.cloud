@@ -110,11 +110,11 @@ export default function TasksPage() {
           <TooltipProvider delay={300}>
             <Tooltip>
               <TooltipTrigger>
-                <div className="font-medium text-sm truncate max-w-[350px]">
+                <div className="font-medium text-sm truncate max-w-[280px]">
                   {name}
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="bottom" align="start">
+              <TooltipContent>
                 <p>{name}</p>
               </TooltipContent>
             </Tooltip>
@@ -152,7 +152,7 @@ export default function TasksPage() {
         const diffSecs = differenceInSeconds(end, start) % 60;
         
         return (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
             {diffMins > 0 ? `${diffMins}m ` : ''}{diffSecs}s
           </span>
         );
@@ -200,7 +200,7 @@ export default function TasksPage() {
                           setCancelJobId(jobId);
                           setCancelDialogOpen(true);
                         }}
-                        className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                       >
                         <Ban className="h-3.5 w-3.5" />
                         <span className="sr-only">Cancel Task</span>
@@ -233,7 +233,7 @@ export default function TasksPage() {
                             rel="noreferrer"
                           />
                         }
-                        className="h-7 w-7 text-primary hover:bg-primary/10 hover:text-primary"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
                       >
                         <Download className="h-3.5 w-3.5" />
                         <span className="sr-only">Unduh Bukti</span>
@@ -249,7 +249,7 @@ export default function TasksPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
                         onClick={async () => {
                           const toastId = toast.loading("Menyalin gambar...");
                           const result = await copyJobResultImage(jobId);
@@ -281,7 +281,7 @@ export default function TasksPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
                         onClick={async () => {
                           const summary = row.getValue("result_summary") as string || "";
                           const distributorUsername = row.original.distributor_username;
