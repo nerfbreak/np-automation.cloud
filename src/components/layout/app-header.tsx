@@ -47,7 +47,7 @@ export function AppHeader({ breadcrumbs }: AppHeaderProps) {
   }, [checkNew]);
 
   return (
-    <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b bg-background px-4">
+    <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border/80 bg-background/100 px-4">
       <div className="flex items-center gap-4">
         <SidebarTrigger />
         <div className="hidden md:flex items-center gap-4">

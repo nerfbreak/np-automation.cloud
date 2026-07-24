@@ -45,9 +45,7 @@ export default function Home() {
 
   return (
     <AppShell breadcrumbs={[{ label: "Dashboard" }]}>
-      <div className="flex flex-col gap-6">
-
-
+      <div className="flex flex-col gap-6 animate-fade-in duration-300">
         <div className="mb-2">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
@@ -56,37 +54,49 @@ export default function Home() {
             </p>
           </div>
         </div>
-        
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <MetricCard 
-            title="Total Jobs Run" 
-            value={jobs.length > 0 ? jobs.length * 12 + 45 : 24} 
-            icon={<Activity className="h-4 w-4" />}
-            trend={{ value: 12, label: "from last month", isPositive: true }}
-            className="bg-card border-border/50 shadow-sm"
-          />
-          <MetricCard 
-            title="Jobs Today" 
-            value={jobs.length > 0 ? jobs.length : 156} 
-            icon={<CheckCircle2 className="h-4 w-4" />}
-            className="bg-card border-border/50 shadow-sm"
-          />
-          <MetricCard 
-            title="Queue (Pending)" 
-            value={jobs.filter(j => j.status === 'PENDING').length} 
-            icon={<Clock className="h-4 w-4" />}
-            className="bg-card border-border/50 shadow-sm"
-          />
-          <MetricCard 
-            title="Running Now" 
-            value={jobs.filter(j => j.status === 'RUNNING').length} 
-            icon={<Play className="h-4 w-4" />}
-            className="bg-card border-border/50 shadow-sm"
-          />
-        </div>
 
-        <div className="mt-8">
-          <SystemMonitor />
+        {/* Bento Grid Layout - Bento Grid Asimetris */}
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          
+          {/* Main Monitor - Kolom Lebih Lebar */}
+          <div className="md:col-span-2 lg:col-span-3 space-y-4">
+            <SystemMonitor />
+          </div>
+
+          {/* Side Metrics - Kolom Vertikal Stack */}
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2 px-1">
+              <Activity className="h-5 w-5 text-muted-foreground" />
+              <h3 className="text-lg font-semibold tracking-tight">Job Statistics</h3>
+            </div>
+            
+            <MetricCard 
+              title="Total Jobs Run" 
+              value={jobs.length > 0 ? jobs.length * 12 + 45 : 24} 
+              icon={<Activity className="h-4 w-4 text-primary" />}
+              trend={{ value: 12, label: "from last month", isPositive: true }}
+              className="bg-card border border-border/80 shadow-none hover:border-primary/30 transition-all duration-200"
+            />
+            <MetricCard 
+              title="Jobs Today" 
+              value={jobs.length > 0 ? jobs.length : 156} 
+              icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+              className="bg-card border border-border/80 shadow-none hover:border-emerald-500/30 transition-all duration-200"
+            />
+            <MetricCard 
+              title="Queue (Pending)" 
+              value={jobs.filter(j => j.status === 'PENDING').length} 
+              icon={<Clock className="h-4 w-4 text-amber-500" />}
+              className="bg-card border border-border/80 shadow-none hover:border-amber-500/30 transition-all duration-200"
+            />
+            <MetricCard 
+              title="Running Now" 
+              value={jobs.filter(j => j.status === 'RUNNING').length} 
+              icon={<Play className="h-4 w-4 text-blue-500" />}
+              className="bg-card border border-border/80 shadow-none hover:border-blue-500/30 transition-all duration-200"
+            />
+          </div>
+
         </div>
       </div>
     </AppShell>

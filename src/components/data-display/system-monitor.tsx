@@ -82,7 +82,7 @@ export function SystemMonitor() {
       
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* CPU */}
-        <Card className="bg-card border-border/50 shadow-sm">
+        <Card className="bg-card border border-border/80 shadow-none hover:border-primary/30 transition-all duration-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">CPU ({stats.cpu.cores} Cores)</CardTitle>
             <Cpu className="h-4 w-4 text-muted-foreground" />
@@ -93,7 +93,7 @@ export function SystemMonitor() {
         </Card>
 
         {/* RAM */}
-        <Card className="bg-card border-border/50 shadow-sm">
+        <Card className="bg-card border border-border/80 shadow-none hover:border-primary/30 transition-all duration-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">RAM ({formatBytes(stats.memory.free, 1)} Free)</CardTitle>
             <MemoryStick className="h-4 w-4 text-muted-foreground" />
@@ -110,7 +110,7 @@ export function SystemMonitor() {
         </Card>
 
         {/* Storage */}
-        <Card className="bg-card border-border/50 shadow-sm">
+        <Card className="bg-card border border-border/80 shadow-none hover:border-primary/30 transition-all duration-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Storage</CardTitle>
             <HardDrive className="h-4 w-4 text-muted-foreground" />
@@ -127,7 +127,7 @@ export function SystemMonitor() {
         </Card>
 
         {/* Network */}
-        <Card className="bg-card border-border/50 shadow-sm">
+        <Card className="bg-card border border-border/80 shadow-none hover:border-primary/30 transition-all duration-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Network (Rx/Tx)</CardTitle>
             <Network className="h-4 w-4 text-muted-foreground" />
