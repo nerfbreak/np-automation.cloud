@@ -229,7 +229,7 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="border-t p-4 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:items-center">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold uppercase text-primary shrink-0">
+          <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold uppercase shrink-0">
             {username.slice(0, 2)}
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden min-w-0">

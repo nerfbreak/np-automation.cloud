@@ -69,25 +69,25 @@ export default function Home() {
                 value={jobs.length > 0 ? jobs.length * 12 + 45 : 24} 
                 icon={<Activity className="h-4 w-4 text-muted-foreground" />}
                 trend={{ value: 12, label: "from last month", isPositive: true }}
-                className="bg-card border border-border/80 shadow-none hover:border-primary/30 transition-all duration-200"
+                className="bg-card border border-border shadow-none hover:border-primary/30 transition-all duration-200"
               />
               <MetricCard 
                 title="Jobs Today" 
                 value={jobs.length > 0 ? jobs.length : 156} 
                 icon={<CheckCircle2 className="h-4 w-4 text-muted-foreground" />}
-                className="bg-card border border-border/80 shadow-none hover:border-primary/30 transition-all duration-200"
+                className="bg-card border border-border shadow-none hover:border-primary/30 transition-all duration-200"
               />
               <MetricCard 
                 title="Queue (Pending)" 
                 value={jobs.filter(j => j.status === 'PENDING').length} 
                 icon={<Clock className="h-4 w-4 text-muted-foreground" />}
-                className="bg-card border border-border/80 shadow-none hover:border-primary/30 transition-all duration-200"
+                className="bg-card border border-border shadow-none hover:border-primary/30 transition-all duration-200"
               />
               <MetricCard 
                 title="Running Now" 
                 value={jobs.filter(j => j.status === 'RUNNING').length} 
                 icon={<Play className="h-4 w-4 text-muted-foreground" />}
-                className="bg-card border border-border/80 shadow-none hover:border-primary/30 transition-all duration-200"
+                className="bg-card border border-border shadow-none hover:border-primary/30 transition-all duration-200"
               />
             </div>
           </div>

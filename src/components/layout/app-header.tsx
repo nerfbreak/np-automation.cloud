@@ -47,11 +47,11 @@ export function AppHeader({ breadcrumbs }: AppHeaderProps) {
   }, [checkNew]);
 
   return (
-    <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border/80 bg-background/100 px-4">
+    <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-background px-4">
       <div className="flex items-center gap-4">
         <SidebarTrigger />
         <div className="hidden md:flex items-center gap-4">
-          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">
+          <Badge variant="secondary" className="bg-muted text-foreground border-border hover:bg-muted/90">
             Production
           </Badge>
           
@@ -104,10 +104,10 @@ export function AppHeader({ breadcrumbs }: AppHeaderProps) {
             className="w-80 p-0 overflow-hidden"
           >
             {/* Header popup */}
-            <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-muted">
               <span className="text-sm font-semibold">Notifikasi</span>
               {hasNew && (
-                <Badge className="text-[10px] bg-destructive/15 text-destructive border-destructive/30">
+                <Badge className="text-[10px] bg-destructive text-destructive-foreground border-destructive">
                   Baru
                 </Badge>
               )}
@@ -116,7 +116,7 @@ export function AppHeader({ breadcrumbs }: AppHeaderProps) {
             {/* Changelog terbaru */}
             <div className="px-4 py-3">
               <div className="flex items-start gap-3">
-                <div className="mt-0.5 h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <div className="mt-0.5 h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
                   <Sparkles className="h-4 w-4 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
