@@ -36,6 +36,7 @@ import {
   SidebarMenuSubItem,
   SidebarMenuSubButton
 } from "@/components/ui/sidebar";
+import { Badge } from "@/components/ui/badge";
 
 const navItems = [
   {
@@ -101,6 +102,15 @@ const systemItems = [
     icon: Settings,
   },
 ];
+
+const getRoleLabel = (user: string) => {
+  const normalized = user.toLowerCase().trim()
+  if (normalized.includes("rizki")) return "Superuser"
+  if (normalized.includes("noval")) return "IT Central Support"
+  if (normalized.includes("fadli")) return "IT West Support"
+  if (normalized.includes("bagus")) return "IT East Support"
+  return "IT Support"
+}
 
 export function AppSidebar() {
   const router = useRouter();
@@ -233,8 +243,13 @@ export function AppSidebar() {
             {username.slice(0, 2)}
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden min-w-0">
-            <span className="text-sm font-medium capitalize">{username}</span>
-            <button onClick={handleLogout} className="text-xs text-muted-foreground hover:text-foreground text-left transition-colors">
+            <span className="text-sm font-semibold capitalize text-foreground truncate">{username}</span>
+            <div className="mt-1">
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-border text-muted-foreground bg-muted font-medium hover:bg-muted">
+                {getRoleLabel(username)}
+              </Badge>
+            </div>
+            <button onClick={handleLogout} className="text-xs text-muted-foreground hover:text-foreground text-left transition-colors mt-1.5">
               Log out
             </button>
           </div>
