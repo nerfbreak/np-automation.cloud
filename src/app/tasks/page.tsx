@@ -362,20 +362,20 @@ export default function TasksPage() {
             <MetricCard
               title="Total Active"
               value={jobs.length}
-              icon={<RefreshCcw className="h-4 w-4 text-sky-500" />}
-              className="bg-gradient-to-br from-card to-card/50 border-sky-900/20 shadow-sm"
+              icon={<RefreshCcw className="h-4 w-4" />}
+              className="bg-card border-border/50 shadow-sm"
             />
             <MetricCard
               title="Pending"
               value={pendingCount}
-              icon={<Clock className="h-4 w-4 text-amber-500" />}
-              className="bg-gradient-to-br from-card to-card/50 border-amber-900/20 shadow-sm"
+              icon={<Clock className="h-4 w-4" />}
+              className="bg-card border-border/50 shadow-sm"
             />
             <MetricCard
               title="Running"
               value={runningCount}
-              icon={<Play className="h-4 w-4 text-emerald-500" />}
-              className="bg-gradient-to-br from-card to-card/50 border-emerald-900/20 shadow-sm"
+              icon={<Play className="h-4 w-4" />}
+              className="bg-card border-border/50 shadow-sm"
             />
           </div>
         )}

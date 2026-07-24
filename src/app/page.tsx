@@ -61,27 +61,27 @@ export default function Home() {
           <MetricCard 
             title="Total Jobs Run" 
             value={jobs.length > 0 ? jobs.length * 12 + 45 : 24} 
-            icon={<Activity className="h-4 w-4 text-emerald-500" />}
+            icon={<Activity className="h-4 w-4" />}
             trend={{ value: 12, label: "from last month", isPositive: true }}
-            className="bg-gradient-to-br from-card to-card/50 border-emerald-900/20 shadow-sm"
+            className="bg-card border-border/50 shadow-sm"
           />
           <MetricCard 
             title="Jobs Today" 
             value={jobs.length > 0 ? jobs.length : 156} 
-            icon={<CheckCircle2 className="h-4 w-4 text-sky-500" />}
-            className="bg-gradient-to-br from-card to-card/50 border-sky-900/20 shadow-sm"
+            icon={<CheckCircle2 className="h-4 w-4" />}
+            className="bg-card border-border/50 shadow-sm"
           />
           <MetricCard 
             title="Queue (Pending)" 
             value={jobs.filter(j => j.status === 'PENDING').length} 
-            icon={<Clock className="h-4 w-4 text-amber-500" />}
-            className="bg-gradient-to-br from-card to-card/50 border-amber-900/20 shadow-sm"
+            icon={<Clock className="h-4 w-4" />}
+            className="bg-card border-border/50 shadow-sm"
           />
           <MetricCard 
             title="Running Now" 
             value={jobs.filter(j => j.status === 'RUNNING').length} 
-            icon={<Play className="h-4 w-4 text-rose-500" />}
-            className="bg-gradient-to-br from-card to-card/50 border-rose-900/20 shadow-sm"
+            icon={<Play className="h-4 w-4" />}
+            className="bg-card border-border/50 shadow-sm"
           />
         </div>
 

@@ -295,26 +295,26 @@ export default function ReportPage() {
             <MetricCard
               title="Total Jobs"
               value={jobs.length}
-              icon={<FileText className="h-4 w-4 text-sky-500" />}
-              className="bg-gradient-to-br from-card to-card/50 border-sky-900/20 shadow-sm"
+              icon={<FileText className="h-4 w-4" />}
+              className="bg-card border-border/50 shadow-sm"
             />
             <MetricCard
               title="Completed"
               value={completedCount}
-              icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />}
-              className="bg-gradient-to-br from-card to-card/50 border-emerald-900/20 shadow-sm"
+              icon={<CheckCircle2 className="h-4 w-4" />}
+              className="bg-card border-border/50 shadow-sm"
             />
             <MetricCard
               title="Failed"
               value={failedCount}
-              icon={<XCircle className="h-4 w-4 text-red-500" />}
-              className="bg-gradient-to-br from-card to-card/50 border-red-900/20 shadow-sm"
+              icon={<XCircle className="h-4 w-4" />}
+              className="bg-card border-border/50 shadow-sm"
             />
             <MetricCard
               title="Success Rate"
               value={`${successRate}%`}
-              icon={<TrendingUp className="h-4 w-4 text-amber-500" />}
-              className="bg-gradient-to-br from-card to-card/50 border-amber-900/20 shadow-sm"
+              icon={<TrendingUp className="h-4 w-4" />}
+              className="bg-card border-border/50 shadow-sm"
             />
           </div>
         )}

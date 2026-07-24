@@ -29,16 +29,24 @@ export function Stepper({ steps, currentStep, className }: StepperProps) {
 
       {/* Steps Indicator Container */}
       <div className="flex items-center justify-between w-full relative">
-        {/* Progress Line Behind */}
-        <div className="absolute top-4 left-4 right-4 h-0.5 bg-muted -translate-y-1/2 z-0" />
+        {/* Progress Line Container */}
         <div 
-          className="absolute top-4 left-4 h-0.5 bg-primary -translate-y-1/2 transition-all duration-300 z-0"
-          style={{ 
-            width: `calc(${((currentStep - 1) / (steps.length - 1)) * 100}% - ${
-              currentStep === 1 ? '0px' : currentStep === steps.length ? '32px' : '16px'
-            })` 
+          className="absolute top-4 h-0.5 -translate-y-1/2 z-0"
+          style={{
+            left: `calc(100% / ${steps.length} / 2)`,
+            right: `calc(100% / ${steps.length} / 2)`
           }}
-        />
+        >
+          {/* Background Line (Muted) */}
+          <div className="w-full h-full bg-muted" />
+          {/* Active Line (Primary) */}
+          <div 
+            className="absolute top-0 left-0 h-full bg-primary transition-all duration-300"
+            style={{ 
+              width: `${((currentStep - 1) / Math.max(1, steps.length - 1)) * 100}%`
+            }}
+          />
+        </div>
 
         {steps.map((step) => {
           const isCompleted = currentStep > step.id
