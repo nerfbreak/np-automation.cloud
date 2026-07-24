@@ -56,7 +56,7 @@ export function AppHeader({ breadcrumbs }: AppHeaderProps) {
           </Badge>
           
           <Breadcrumb>
-            <BreadcrumbList>
+            <BreadcrumbList className="min-h-8 rounded-md border px-3 py-0.5">
               {breadcrumbs ? (
                 breadcrumbs.map((item, index) => (
                   <React.Fragment key={item.label}>
