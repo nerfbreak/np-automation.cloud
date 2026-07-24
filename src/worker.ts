@@ -4,6 +4,8 @@ import { executeStockAdjustment, closeBrowser, BotProgressEvent } from './lib/ne
 import { supabaseAdmin } from './lib/supabase'
 import { decrypt } from './lib/crypto'
 import dotenv from 'dotenv'
+import fs from 'fs'
+import path from 'path'
 
 // Load environment variables from .env.local for standalone worker execution
 dotenv.config({ path: '.env.local' })
@@ -13,12 +15,14 @@ const connection = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', 
 })
 
 console.log("Starting BullMQ Worker for inventory adjustments...")
-console.log("Concurrency set to 3. Waiting for jobs...")
+console.log("Concurrency set to 1. Waiting for jobs...")
 
 const worker = new Worker(
   'inventory-adjustment-queue',
   async (job) => {
     const { rows, remark, distributorUsername } = job.data
+    const startTime = Date.now()
+    let distributorName = ""
 
     console.log(`[Job ${job.id}] Started execution for distributor: ${distributorUsername}`)
 
@@ -26,13 +30,13 @@ const worker = new Worker(
       // 1. Update status to RUNNING
       await supabaseAdmin
         .from('jobs')
-        .update({ status: 'RUNNING', result_summary: null })
+        .update({ status: 'RUNNING', result_summary: null, updated_at: new Date().toISOString() })
         .eq('job_id', job.id?.toString())
 
       // 2. Fetch distributor credentials
       const { data: distributor, error: distError } = await supabaseAdmin
         .from('distributors')
-        .select('username, password_encrypted')
+        .select('username, password_encrypted, name')
         .eq('username', distributorUsername)
         .single()
 
@@ -41,6 +45,7 @@ const worker = new Worker(
       }
 
       // 3. Decrypt password
+      if (distributor.name) { distributorName = distributor.name }
       const plainPassword = decrypt(distributor.password_encrypted)
 
       // 4. Progress callback
@@ -53,7 +58,8 @@ const worker = new Worker(
             .from('jobs')
             .update({ 
               status: 'RUNNING',
-              result_summary: `Memproses SKU ${event.index + 1} dari ${event.total} (${event.sku})` 
+              result_summary: `Memproses SKU ${event.index + 1} dari ${event.total} (${event.sku})`,
+              updated_at: new Date().toISOString() 
             })
             .eq('job_id', job.id?.toString())
             .then()
@@ -61,26 +67,130 @@ const worker = new Worker(
       }
 
       // 5. Execute Bot
-      const screenshotBase64 = await executeStockAdjustment(
+      const { screenshotBase64, adjustedCount } = await executeStockAdjustment(
         { username: distributor.username, password: plainPassword },
         rows,
         remark,
         onProgress
       )
 
+      // Save screenshot file to disk
+      if (screenshotBase64) {
+        try {
+          const screenshotsDir = path.join(process.cwd(), 'public', 'screenshots')
+          fs.mkdirSync(screenshotsDir, { recursive: true })
+          const screenshotPath = path.join(screenshotsDir, `${job.id}.png`)
+          fs.writeFileSync(screenshotPath, Buffer.from(screenshotBase64, 'base64'))
+          try {
+            fs.chmodSync(screenshotPath, 0o644)
+          } catch (chmodErr) {
+            console.error(`[Job ${job.id}] Failed to chmod screenshot:`, chmodErr)
+          }
+
+          // Cleanup screenshots older than 1 hour
+          try {
+            const files = fs.readdirSync(screenshotsDir)
+            const now = Date.now()
+            files.forEach((file: string) => {
+              if (file.endsWith('.png')) {
+                const filePath = path.join(screenshotsDir, file)
+                const stat = fs.statSync(filePath)
+                if (now - stat.mtimeMs > 3600000) {
+                  fs.unlinkSync(filePath)
+                  console.log(`Deleted old screenshot: ${file}`)
+                }
+              }
+            })
+          } catch (cleanupErr) {
+            console.error(`[Job ${job.id}] Failed to cleanup old screenshots:`, cleanupErr)
+          }
+        } catch (fsErr) {
+          console.error(`[Job ${job.id}] Failed to save screenshot to disk:`, fsErr)
+        }
+      }
+
       // Kill browser setelah job selesai untuk free RAM di VPS
       await closeBrowser(distributor.username, true).catch(() => {})
+
+      const summaryMsg = screenshotBase64 
+        ? `Successfully adjusted ${adjustedCount} rows. [SCREENSHOT_READY]` 
+        : `Successfully adjusted ${adjustedCount} rows.`
 
       // 6. Update status to COMPLETED
       await supabaseAdmin
         .from('jobs')
         .update({ 
           status: 'COMPLETED',
-          result_summary: `Successfully adjusted ${rows.length} rows.` 
+          result_summary: summaryMsg,
+          updated_at: new Date().toISOString() 
           // In a real scenario, you could save the screenshotBase64 to Supabase Storage
           // and save the URL here.
         })
         .eq('job_id', job.id?.toString())
+
+      // Telegram notification
+      const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+      const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
+
+      if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
+        try {
+          const diffSecs = Math.floor((Date.now() - startTime) / 1000)
+          const mins = Math.floor(diffSecs / 60)
+          const secs = diffSecs % 60
+          const durationStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+
+          const distributorDisplay = distributorName
+            ? `${distributorName} (${distributorUsername})`
+            : distributorUsername
+          const caption = `✅ Stok Adjustment Report\nDistributor: ${distributorDisplay}\nStatus: ${summaryMsg}\nDuration: ${durationStr}`
+
+          if (screenshotBase64) {
+            const formData = new FormData()
+            formData.append('chat_id', TELEGRAM_CHAT_ID)
+            formData.append('caption', caption)
+
+            const byteCharacters = atob(screenshotBase64)
+            const byteNumbers = new Array(byteCharacters.length)
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i)
+            }
+            const byteArray = new Uint8Array(byteNumbers)
+            const blob = new Blob([byteArray], { type: 'image/png' })
+
+            formData.append('photo', blob, 'screenshot.png')
+
+            const tgResp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+              method: 'POST',
+              body: formData
+            })
+
+            if (tgResp.ok) {
+              console.log(`[Job ${job.id}] Sent photo notification to Telegram`)
+            } else {
+              console.error(`[Job ${job.id}] Telegram API returned status ${tgResp.status}`)
+            }
+          } else {
+            // No screenshot, send simple text message
+            const tgResp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                chat_id: TELEGRAM_CHAT_ID,
+                text: caption,
+              }),
+            })
+            if (tgResp.ok) {
+              console.log(`[Job ${job.id}] Sent text notification to Telegram`)
+            } else {
+              console.error(`[Job ${job.id}] Telegram API returned status ${tgResp.status}`)
+            }
+          }
+        } catch (tgErr: any) {
+          console.error(`[Job ${job.id}] Failed to send Telegram message:`, tgErr.message)
+        }
+      }
 
       console.log(`[Job ${job.id}] Completed successfully.`)
       return { success: true }
@@ -95,9 +205,46 @@ const worker = new Worker(
         .from('jobs')
         .update({ 
           status: 'FAILED',
-          result_summary: `Error: ${error.message}`
+          result_summary: `Error: ${error.message}`,
+          updated_at: new Date().toISOString()
         })
         .eq('job_id', job.id?.toString())
+
+      // Send failure notification to Telegram
+      const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+      const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
+
+      if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
+        try {
+          const diffSecs = Math.floor((Date.now() - startTime) / 1000)
+          const mins = Math.floor(diffSecs / 60)
+          const secs = diffSecs % 60
+          const durationStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+
+          const distributorDisplay = distributorName
+            ? `${distributorName} (${distributorUsername})`
+            : distributorUsername
+          const caption = `❌ Stok Adjustment FAILED\nDistributor: ${distributorDisplay}\nError: ${error.message}\nDuration: ${durationStr}`
+
+          const tgResp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              chat_id: TELEGRAM_CHAT_ID,
+              text: caption,
+            }),
+          })
+          if (tgResp.ok) {
+            console.log(`[Job ${job.id}] Sent failure notification to Telegram`)
+          } else {
+            console.error(`[Job ${job.id}] Telegram API returned status ${tgResp.status}`)
+          }
+        } catch (tgErr: any) {
+          console.error(`[Job ${job.id}] Failed to send Telegram failure message:`, tgErr.message)
+        }
+      }
 
       throw error
     }
