@@ -243,13 +243,9 @@ export function AppSidebar() {
             {username.slice(0, 2)}
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden min-w-0">
-            <span className="text-sm font-semibold capitalize text-foreground truncate">{username}</span>
-            <div className="mt-1">
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-border text-muted-foreground bg-muted font-medium hover:bg-muted">
-                {getRoleLabel(username)}
-              </Badge>
-            </div>
-            <button onClick={handleLogout} className="text-xs text-muted-foreground hover:text-foreground text-left transition-colors mt-1.5">
+            <span className="text-sm font-semibold capitalize text-foreground leading-tight">{username}</span>
+            <span className="text-[11px] text-muted-foreground leading-normal mt-0.5">{getRoleLabel(username)}</span>
+            <button onClick={handleLogout} className="text-[11px] text-muted-foreground hover:text-foreground text-left mt-1 transition-colors">
               Log out
             </button>
           </div>
