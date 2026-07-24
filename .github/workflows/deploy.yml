@@ -14,10 +14,14 @@ jobs:
         with:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
+          format: markdown
           message: |
             🚀 *Deploying np-automation...*
-            Commit: `${{ github.event.head_commit.message }}`
-            Author: `${{ github.event.head_commit.author.name }}`
+
+            *Commit Info:*
+            • *Message:* ${{ github.event.head_commit.message }}
+            • *Author:* ${{ github.event.head_commit.author.name }}
+            • *URL:* [View Commit](${{ github.event.head_commit.url }})
 
       - name: SSH Deploy to VPS
         uses: appleboy/ssh-action@master
@@ -40,9 +44,12 @@ jobs:
         with:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
+          format: markdown
           message: |
             ✅ *Deployment Successful!*
-            Aplikasi `np-automation` berhasil di-deploy ke VPS.
+
+            Aplikasi *np-automation* berhasil di-deploy ke VPS.
+            *Commit:* `${{ github.event.head_commit.message }}`
 
       - name: Send failure notification to Telegram
         if: failure()
@@ -50,7 +57,11 @@ jobs:
         with:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
+          format: markdown
           message: |
             ❌ *Deployment Failed!*
-            Deploy aplikasi `np-automation` gagal. Cek log GitHub Actions.
+
+            Deploy aplikasi *np-automation* gagal.
+            Silakan cek log GitHub Actions untuk detail error.
+
 
