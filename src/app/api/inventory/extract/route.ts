@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { extractNewspageStock, BotProgressEvent } from "@/lib/newspage-bot"
+import { extractNewspageStock, closeBrowser, BotProgressEvent } from "@/lib/newspage-bot"
 import { supabaseAdmin } from "@/lib/supabase"
 import { decrypt } from "@/lib/crypto"
 
@@ -48,6 +48,9 @@ export async function POST(req: NextRequest) {
         const message = err instanceof Error ? err.message : "Unknown error"
         send({ type: "error", message })
       } finally {
+        if (username) {
+          await closeBrowser(username, true).catch(() => {});
+        }
         controller.close()
       }
     },
