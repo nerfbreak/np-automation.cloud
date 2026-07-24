@@ -16,50 +16,66 @@ interface StepperProps {
 
 export function Stepper({ steps, currentStep, className }: StepperProps) {
   return (
-    <div 
-      className={cn("flex items-center w-full pb-8 overflow-x-auto", className)}
-      style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-    >
-      {steps.map((step, index) => (
-        <div key={step.id} className="flex items-center flex-1 last:flex-none min-w-[120px] md:min-w-0">
-          <div className="relative flex items-center justify-center">
-            <div
-              className={cn(
-                "h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium border-2 transition-all",
-                currentStep > step.id
-                  ? "bg-primary border-primary text-primary-foreground"
-                  : currentStep === step.id
-                  ? "border-primary text-primary bg-primary/10"
-                  : "border-muted-foreground/30 text-muted-foreground"
-              )}
-            >
-              {currentStep > step.id ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <span>{step.id}</span>
-              )}
+    <div className={cn("w-full py-4 px-1", className)}>
+      {/* Mobile view: compact active step text */}
+      <div className="flex flex-col md:hidden items-center justify-center mb-6">
+        <span className="text-xs font-bold uppercase tracking-wider text-primary/80">
+          Langkah {currentStep} dari {steps.length}
+        </span>
+        <span className="text-lg font-extrabold text-foreground mt-0.5">
+          {steps[currentStep - 1]?.label}
+        </span>
+      </div>
+
+      {/* Steps Indicator Container */}
+      <div className="flex items-center justify-between w-full relative">
+        {/* Progress Line Behind */}
+        <div className="absolute top-4 left-4 right-4 h-0.5 bg-muted -translate-y-1/2 z-0" />
+        <div 
+          className="absolute top-4 left-4 h-0.5 bg-primary -translate-y-1/2 transition-all duration-300 z-0"
+          style={{ 
+            width: `calc(${((currentStep - 1) / (steps.length - 1)) * 100}% - ${
+              currentStep === 1 ? '0px' : currentStep === steps.length ? '32px' : '16px'
+            })` 
+          }}
+        />
+
+        {steps.map((step) => {
+          const isCompleted = currentStep > step.id
+          const isActive = currentStep === step.id
+          return (
+            <div key={step.id} className="flex flex-col items-center z-10 flex-1">
+              <div
+                className={cn(
+                  "h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all bg-card",
+                  isCompleted
+                    ? "bg-primary border-primary text-primary-foreground"
+                    : isActive
+                    ? "border-primary text-primary bg-primary/10 ring-4 ring-primary/20"
+                    : "border-muted-foreground/30 text-muted-foreground"
+                )}
+              >
+                {isCompleted ? (
+                  <Check className="h-4 w-4 stroke-[3px]" />
+                ) : (
+                  <span>{step.id}</span>
+                )}
+              </div>
+              
+              {/* Labels on Desktop */}
+              <span
+                className={cn(
+                  "hidden md:block mt-3 text-xs font-bold text-center max-w-[90px] leading-snug transition-colors",
+                  isActive ? "text-primary" : isCompleted ? "text-foreground" : "text-muted-foreground/60"
+                )}
+              >
+                {step.label}
+              </span>
             </div>
-            <span
-              className={cn(
-                "absolute top-10 w-24 text-center text-xs font-medium leading-tight",
-                currentStep >= step.id
-                  ? "text-foreground"
-                  : "text-muted-foreground"
-              )}
-            >
-              {step.label}
-            </span>
-          </div>
-          {index < steps.length - 1 && (
-            <div
-              className={cn(
-                "h-0.5 flex-1 mx-2 transition-all",
-                currentStep > step.id ? "bg-primary" : "bg-muted"
-              )}
-            />
-          )}
-        </div>
-      ))}
+          )
+        })}
+      </div>
     </div>
   )
 }
+
