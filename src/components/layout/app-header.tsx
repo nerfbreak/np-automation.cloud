@@ -51,10 +51,6 @@ export function AppHeader({ breadcrumbs }: AppHeaderProps) {
       <div className="flex items-center gap-4">
         <SidebarTrigger />
         <div className="hidden md:flex items-center gap-4">
-          <Badge variant="secondary" className="bg-muted text-foreground border-border hover:bg-muted/90">
-            Production
-          </Badge>
-          
           <Breadcrumb>
             <BreadcrumbList className="min-h-8 rounded-md border px-3 py-0.5">
               {breadcrumbs ? (
