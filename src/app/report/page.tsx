@@ -134,7 +134,7 @@ function Pagination({ page, total, pageSize, onChange }: {
   page: number; total: number; pageSize: number; onChange: (p: number) => void;
 }) {
   const totalPages = Math.ceil(total / pageSize);
-  if (totalPages <= 1) return null;
+  if (total === 0) return null;
   return (
     <div className="flex items-center justify-between px-2 py-3 border-t">
       <p className="text-xs text-muted-foreground">
