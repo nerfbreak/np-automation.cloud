@@ -307,7 +307,7 @@ worker.on('error', err => {
 })
 
 
-import { exec } from 'child_process'
+import { exec, spawn } from 'child_process'
 
 async function handleTelegramUpdate(update: any) {
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
@@ -365,14 +365,7 @@ async function handleTelegramUpdate(update: any) {
       })
     } else if (data === "build_web") {
       console.log("[TelegramBot] Build Web triggered via button")
-      await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "⏳ Menjalankan `npm run build && pm2 restart np-web` di VPS (proses ini butuh waktu ~1 menit)...")
-      exec("cd /home/rizki/np-automation && npm run build && pm2 restart np-web", (err, stdout, stderr) => {
-        if (err) {
-          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ **Build Gagal:**\n${err.message}\n${stderr}`)
-        } else {
-          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `✅ **Build & Restart Berhasil!** Website np-automation.cloud kini aktif kembali.`)
-        }
-      })
+      executeBuildPipeline(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
     }
   }
 
@@ -401,14 +394,7 @@ async function handleTelegramUpdate(update: any) {
         sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `📋 **Web Error Logs (Last 25 lines):**\n\`\`\`\n${cleanOutput}\n\`\`\``)
       })
     } else if (text.startsWith("/build") || text === "build") {
-      await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "⏳ Menjalankan `npm run build && pm2 restart np-web` di VPS (proses ini butuh waktu ~1 menit)...")
-      exec("cd /home/rizki/np-automation && npm run build && pm2 restart np-web", (err, stdout, stderr) => {
-        if (err) {
-          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ **Build Gagal:**\n${err.message}\n${stderr}`)
-        } else {
-          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `✅ **Build & Restart Berhasil!** Website np-automation.cloud kini aktif kembali.`)
-        }
-      })
+      executeBuildPipeline(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
     } else if (text.startsWith("/help") || text === "help") {
       const helpMsg = `🤖 **NP Automation Admin Bot**\nKirim perintah berikut untuk mengoperasikan VPS:\n- /restart atau tulis "restart": Restart web server\n- /status atau tulis "pm2": Cek status PM2\n- /logs atau tulis "logs": Tampilkan log error terkini web server\n- /build atau tulis "build": Build & fix NextJS (Fix 502 build error)\n- /help: Tampilkan menu bantuan ini`
       sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, helpMsg)
@@ -480,3 +466,50 @@ async function startTelegramPoller() {
 }
 
 startTelegramPoller()
+
+async function executeBuildPipeline(token: string, chatId: string) {
+  await sendTelegramMessage(token, chatId, "🔨 **Mulai Proses Build di VPS...**\n`1/2: Menghapus cache & compiler build lama...`")
+  
+  // spawn agar luwes membaca output stdout/stderr per line secara live
+  const child = spawn("npm", ["run", "build"], {
+    cwd: "/home/rizki/np-automation",
+    shell: true,
+    env: { ...process.env, NODE_ENV: "production" }
+  })
+
+  let outputLog = ""
+
+  child.stdout.on("data", (data) => {
+    const chunk = data.toString()
+    console.log("[Build Stdout]", chunk)
+    outputLog += chunk
+  })
+
+  child.stderr.on("data", (data) => {
+    const chunk = data.toString()
+    console.error("[Build Stderr]", chunk)
+    outputLog += chunk
+  })
+
+  child.on("close", (code) => {
+    console.log(`[Build Closed] Exit code: ${code}`)
+    if (code === 0) {
+      sendTelegramMessage(token, chatId, `✅ **Build NextJS Berhasil!**\n\`2/2: Merestart service web...\``)
+      exec("pm2 restart np-web", (pm2Err, pm2Out, pm2Stderr) => {
+        if (pm2Err) {
+          sendTelegramMessage(token, chatId, `❌ **Gagal Restart:**\n${pm2Err.message}`)
+        } else {
+          sendTelegramMessage(token, chatId, `🎉 **Selesai!** Website np-automation.cloud kini sudah aktif & bebas dari 502 Bad Gateway.`)
+        }
+      })
+    } else {
+      const errorSample = outputLog.substring(outputLog.length - 2000) || "No error log detail"
+      sendTelegramMessage(token, chatId, `❌ **Build NextJS Gagal (Exit Code ${code})**\nLog error terakhir:\n\`\`\`\n${errorSample}\n\`\`\``)
+    }
+  })
+
+  child.on("error", (err) => {
+    console.error("[Build process error]", err)
+    sendTelegramMessage(token, chatId, `❌ **Proses Build Error:**\n${err.message}`)
+  })
+}
