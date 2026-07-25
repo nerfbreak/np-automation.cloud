@@ -381,6 +381,7 @@ async function handleTelegramUpdate(update: any) {
 
       const payload = {
         model: "auto",
+        stream: false,
         messages: [
           {
             role: "system",
@@ -397,16 +398,39 @@ async function handleTelegramUpdate(update: any) {
       try {
         const aiResp = await fetch("http://localhost:20128/v1/chat/completions", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
           body: JSON.stringify(payload),
           signal: AbortSignal.timeout(180000)
         })
 
         if (!aiResp.ok) {
-          throw new Error(`OmniRoute returned status ${aiResp.status}`)
+          const errBody = await aiResp.text().catch(() => "")
+          throw new Error(`OmniRoute returned status ${aiResp.status}: ${errBody.substring(0, 200)}`)
         }
 
-        const dataJson: any = await aiResp.json()
+        // OmniRoute kadang return SSE stream meski stream:false — handle keduanya
+        const rawText = await aiResp.text()
+        let dataJson: any
+        if (rawText.trimStart().startsWith("data:")) {
+          // Parse SSE: ambil semua content dari delta/message
+          let accumulated = ""
+          const lines = rawText.split("\n")
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (!trimmed.startsWith("data:")) continue
+            const jsonStr = trimmed.slice(5).trim()
+            if (jsonStr === "[DONE]") break
+            try {
+              const chunk = JSON.parse(jsonStr)
+              const delta = chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.message?.content ?? ""
+              if (delta) accumulated += delta
+            } catch { /* skip malformed chunk */ }
+          }
+          dataJson = { choices: [{ message: { content: accumulated } }] }
+        } else {
+          dataJson = JSON.parse(rawText)
+        }
+
         let resultText = dataJson.choices?.[0]?.message?.content
         if (!resultText) {
           throw new Error("Empty completion result from OmniRoute.")
