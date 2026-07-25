@@ -743,8 +743,39 @@ let lastBuildError: { filePath: string; fileContent: string; errorMsg: string } 
 
 
 async function executeBuildPipeline(token: string, chatId: string) {
-  await sendTelegramMessage(token, chatId, "🔨 **Mulai Proses Build di VPS...**\n`1/2: Menghapus cache & compiler build lama...`")
-  
+  await sendTelegramMessage(token, chatId, "🔨 **Mulai Proses Build di VPS...**\n`1/3: Git pull & install dependencies...`")
+
+  // Step 1: git pull
+  await new Promise<void>((resolve) => {
+    const pull = spawn("git", ["pull", "origin", "master"], {
+      cwd: "/home/rizki/np-automation",
+      shell: true,
+    })
+    pull.on("close", () => resolve())
+  })
+
+  // Step 2: npm install (agar package baru ikut terinstall)
+  await new Promise<void>((resolve, reject) => {
+    const install = spawn("npm", ["install", "--prefer-offline"], {
+      cwd: "/home/rizki/np-automation",
+      shell: true,
+    })
+    let installLog = ""
+    install.stdout.on("data", (d) => { installLog += d.toString() })
+    install.stderr.on("data", (d) => { installLog += d.toString() })
+    install.on("close", (code) => {
+      if (code !== 0) {
+        sendTelegramMessage(token, chatId, `❌ **npm install gagal**\n\`\`\`\n${installLog.slice(-800)}\n\`\`\``)
+        reject(new Error("npm install failed"))
+      } else {
+        resolve()
+      }
+    })
+  }).catch(() => { return })
+
+  await sendTelegramMessage(token, chatId, "📦 Dependencies OK.\n`2/3: Menghapus cache & build Next.js...`")
+
+  // Step 3: npm run build
   // spawn agar luwes membaca output stdout/stderr per line secara live
   const child = spawn("npm", ["run", "build"], {
     cwd: "/home/rizki/np-automation",
@@ -771,7 +802,7 @@ async function executeBuildPipeline(token: string, chatId: string) {
     if (code === 0) {
       // Clear error on success
       lastBuildError = null
-      sendTelegramMessage(token, chatId, `✅ **Build NextJS Berhasil!**\n\`2/2: Merestart service web...\``)
+      sendTelegramMessage(token, chatId, `✅ **Build NextJS Berhasil!**\n\`3/3: Merestart service web...\``)
       exec("pm2 restart np-web", (pm2Err, pm2Out, pm2Stderr) => {
         if (pm2Err) {
           sendTelegramMessage(token, chatId, `❌ **Gagal Restart:**\n${pm2Err.message}`)
