@@ -890,6 +890,22 @@ export async function executeStockAdjustment(
 
     onProgress({ type: "log", message: `Mengeksekusi ${rows.length} baris selisih...` })
 
+    // Helper: dismiss popup YesNo kalau visible — bisa dipanggil kapanpun
+    const dismissAnywhere = async () => {
+      try {
+        await page.evaluate(() => {
+          const yesBtns = document.querySelectorAll("[id$='pag_PopUp_YesNo_btn_Yes_Value']");
+          for (let j = 0; j < yesBtns.length; j++) {
+            if ((yesBtns[j] as HTMLElement).offsetHeight > 0) {
+              (yesBtns[j] as HTMLElement).click();
+              return;
+            }
+          }
+        });
+        await page.waitForTimeout(300);
+      } catch {}
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
 
@@ -910,35 +926,48 @@ export async function executeStockAdjustment(
 
       const frame = await findFrame(page, "pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value")
 
-      // Cek dan handle popup peringatan (seperti peringatan item inactive) yang mungkin muncul dari baris sebelumnya
-      const isPopupVisible = await frame.evaluate(() => {
-        const bg = document.querySelector(".Popup_Background");
-        return bg && (bg as HTMLElement).offsetHeight > 0;
-      }).catch(() => false);
-
-      if (isPopupVisible) {
-        onProgress({ type: "log", message: "Popup peringatan terdeteksi, mengonfirmasi (Yes)..." })
-        await frame.evaluate(() => {
-          const yesBtns = document.querySelectorAll("[id$='pag_PopUp_YesNo_btn_Yes_Value']");
-          for (let i = 0; i < yesBtns.length; i++) {
-            if ((yesBtns[i] as HTMLElement).offsetHeight > 0) {
-              (yesBtns[i] as HTMLElement).click();
-              return;
+      // Helper: dismiss popup YesNo kalau visible â€” dipanggil sebelum setiap interaksi form
+      const dismissPopup = async () => {
+        const visible = await frame.evaluate(() => {
+          const bg = document.querySelector(".Popup_Background");
+          return bg && (bg as HTMLElement).offsetHeight > 0;
+        }).catch(() => false);
+        if (visible) {
+          onProgress({ type: "log", message: "Popup peringatan terdeteksi, mengonfirmasi (Yes)..." })
+          await frame.evaluate(() => {
+            const yesBtns = document.querySelectorAll("[id$='pag_PopUp_YesNo_btn_Yes_Value']");
+            for (let j = 0; j < yesBtns.length; j++) {
+              if ((yesBtns[j] as HTMLElement).offsetHeight > 0) {
+                (yesBtns[j] as HTMLElement).click();
+                return;
+              }
             }
-          }
-        }).catch(() => {});
-        await smartWait(page);
+          }).catch(() => {});
+          await smartWait(page);
+          // Tunggu popup benar-benar hilang (max 5s) sebelum lanjut interaksi
+          await frame.waitForFunction(() => {
+            const bg = document.querySelector(".Popup_Background") as HTMLElement | null;
+            return !bg || bg.offsetHeight === 0;
+          }, {}, { timeout: 5000 }).catch(() => {});
+        }
       }
 
-      // Input SKU dengan simulasi ketikan asli (pressSequentially) supaya semua event JS di webforms ketrigger
-      const skuInput = frame.locator("#pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value")
-      await skuInput.click({ force: true }) // Gunakan force agar tidak tertahan kalau ada sisa overlay animasi
-      await skuInput.fill("") // Clear dulu
-      await skuInput.pressSequentially(row.sku, { delay: 10 })
-      await page.waitForTimeout(100) // Kasih napas setelah ngetik SKU
+      // Dismiss popup sebelum mulai interaksi SKU
+      await dismissPopup();
+
+      // Input SKU â€” gunakan JS langsung supaya aman untuk SKU dengan "/" dan karakter khusus
+      // pressSequentially bisa gagal interpret "/" di VPS keyboard layout tertentu
+      await frame.evaluate((sku: string) => {
+        const el = document.querySelector("#pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value") as HTMLInputElement | null;
+        if (el) { el.focus(); el.value = sku; el.dispatchEvent(new Event("input", { bubbles: true })); }
+      }, row.sku)
+      await page.waitForTimeout(100) // Kasih napas setelah set SKU
       
-      // Tekan Tab
-      await skuInput.press("Tab")
+      // Tekan Tab via JS dispatchEvent agar tidak kena intercept Popup_Background
+      await frame.evaluate(() => {
+        const el = document.querySelector("#pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value") as HTMLInputElement | null;
+        if (el) { el.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", keyCode: 9, bubbles: true })); el.dispatchEvent(new KeyboardEvent("keyup", { key: "Tab", keyCode: 9, bubbles: true })); el.blur(); }
+      })
       await smartWait(page, 100) // Tunggu loading postback selesai dengan lebih cepat
 
       // Cek apakah SKU ditolak oleh Newspage (field jadi kosong lagi)
@@ -987,15 +1016,16 @@ export async function executeStockAdjustment(
         
         // Coba bersihkan/kosongkan input SKU agar input berikutnya tidak menumpuk/kacau
         try {
-          const frame = await findFrame(page, "pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value")
-          const skuInput = frame.locator("#pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value")
-          await skuInput.click({ force: true }).catch(() => {})
-          await skuInput.fill("").catch(() => {})
-          const yesBtn = frame.locator("[id$='pag_PopUp_YesNo_btn_Yes_Value']").first()
-          if (await yesBtn.isVisible().catch(() => false)) {
-            await yesBtn.click().catch(() => {})
-            await smartWait(page)
-          }
+          // Dismiss popup dulu sebelum fokus ke input
+          await dismissAnywhere()
+          const frameClean = await findFrame(page, "pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value")
+          // Kosongkan via JS, bukan click — click bisa kena intercept popup
+          await frameClean.evaluate(() => {
+            const el = document.querySelector("#pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value") as HTMLInputElement | null;
+            if (el) { el.focus(); el.value = ""; el.dispatchEvent(new Event("input", { bubbles: true })); }
+          })
+          // Double-check: kalau masih ada popup, dismiss lagi
+          await dismissAnywhere()
         } catch (cleanupErr) {
           console.error("Gagal membersihkan input SKU setelah error:", cleanupErr)
         }
