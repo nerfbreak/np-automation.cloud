@@ -447,14 +447,25 @@ async function handleTelegramUpdate(update: any) {
     const text = update.message.text.trim().toLowerCase()
     
     if (text.startsWith("/restart") || text === "restart" || text === "fix" || text.includes("502")) {
-      await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "⏳ Menjalankan `pm2 restart np-web` di VPS...")
-      exec("pm2 restart np-web", (err, stdout, stderr) => {
-        if (err) {
-          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ Gagal restart: ${err.message}`)
-        } else {
-          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `✅ Berhasil restart 'np-web'!\n${stdout || stderr}`)
-        }
-      })
+      const parts = text.split(/\s+/)
+      const target = parts[1] || "web" // default to web
+
+      if (target === "worker") {
+        await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "⏳ Menjalankan `pm2 restart np-worker` di VPS...\n(Catatan: bot mungkin akan offline sejenak)")
+        exec("pm2 restart np-worker", (err, stdout, stderr) => {}) // tidak bisa kirim notif balik karena program telah di-restart
+      } else if (target === "all") {
+        await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "⏳ Menjalankan `pm2 restart all` di VPS...")
+        exec("pm2 restart np-web && pm2 restart np-worker", (err, stdout, stderr) => {})
+      } else {
+        await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "⏳ Menjalankan `pm2 restart np-web` di VPS...")
+        exec("pm2 restart np-web", (err, stdout, stderr) => {
+          if (err) {
+            sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ Gagal restart: ${err.message}`)
+          } else {
+            sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `✅ Berhasil restart 'np-web'!\n${stdout || stderr}`)
+          }
+        })
+      }
     } else if (text.startsWith("/status") || text === "status" || text === "pm2") {
       exec("pm2 status", (err, stdout, stderr) => {
         const output = stdout || stderr || "No output"
