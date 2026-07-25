@@ -5,7 +5,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { MetricCard } from "@/components/data-display/metric-card";
 import { StatusBadge } from "@/components/feedback/status-badge";
 import { formatDistanceToNow, differenceInMinutes, differenceInSeconds } from "date-fns";
-import { Download, Copy, Image as ImageIcon, CheckCircle2, XCircle, TrendingUp, FileText, Inbox, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, Copy, Image as ImageIcon, CheckCircle2, XCircle, TrendingUp, FileText, Inbox, Search } from "lucide-react";
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -130,26 +131,60 @@ function JobRow({ job }: { job: RealJob }) {
   );
 }
 
-function Pagination({ page, total, pageSize, onChange }: {
+function JobsPagination({ page, total, pageSize, onChange }: {
   page: number; total: number; pageSize: number; onChange: (p: number) => void;
 }) {
-  const totalPages = Math.ceil(total / pageSize);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (total === 0) return null;
+
+  // Build page numbers to show
+  const pages: (number | "ellipsis")[] = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (page > 3) pages.push("ellipsis");
+    for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
+    if (page < totalPages - 2) pages.push("ellipsis");
+    pages.push(totalPages);
+  }
+
   return (
-    <div className="flex items-center justify-between px-2 py-3 border-t">
-      <p className="text-xs text-muted-foreground">
-        {(page - 1) * pageSize + 1}&#8211;{Math.min(page * pageSize, total)} dari {total} jobs
-      </p>
-      <div className="flex items-center gap-1">
-        <Button variant="outline" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => onChange(page - 1)}>
-          <ChevronLeft className="h-3.5 w-3.5" />
-        </Button>
-        <span className="text-xs px-2 tabular-nums">{page} / {totalPages}</span>
-        <Button variant="outline" size="icon" className="h-7 w-7" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>
-          <ChevronRight className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-    </div>
+    <Pagination className="mt-4">
+      <PaginationContent>
+        <PaginationItem>
+          <PaginationPrevious
+            href="#"
+            onClick={e => { e.preventDefault(); if (page > 1) onChange(page - 1); }}
+            aria-disabled={page <= 1}
+            className={page <= 1 ? "pointer-events-none opacity-50" : ""}
+          />
+        </PaginationItem>
+        {pages.map((p, i) =>
+          p === "ellipsis" ? (
+            <PaginationItem key={`ell-${i}`}><PaginationEllipsis /></PaginationItem>
+          ) : (
+            <PaginationItem key={p}>
+              <PaginationLink
+                href="#"
+                isActive={p === page}
+                onClick={e => { e.preventDefault(); onChange(p); }}
+              >
+                {p}
+              </PaginationLink>
+            </PaginationItem>
+          )
+        )}
+        <PaginationItem>
+          <PaginationNext
+            href="#"
+            onClick={e => { e.preventDefault(); if (page < totalPages) onChange(page + 1); }}
+            aria-disabled={page >= totalPages}
+            className={page >= totalPages ? "pointer-events-none opacity-50" : ""}
+          />
+        </PaginationItem>
+      </PaginationContent>
+    </Pagination>
   );
 }
 
@@ -237,29 +272,29 @@ export default function ReportPage() {
               </div>
             </div>
             {(["all","completed","failed"] as const).map(tab => (
-              <TabsContent key={tab} value={tab} className="mt-0">
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[220px]">Distributor</TableHead>
-                        <TableHead className="w-[120px]">Status</TableHead>
-                        <TableHead className="w-[140px]">Time</TableHead>
-                        <TableHead className="w-[90px]">Duration</TableHead>
-                        <TableHead className="max-w-[300px]">Summary</TableHead>
-                        <TableHead className="w-[100px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pagedJobs.length === 0
-                        ? <TableRow><TableCell colSpan={6} className="h-32 text-center text-sm text-muted-foreground">Tidak ada data.</TableCell></TableRow>
-                        : pagedJobs.map(job => <JobRow key={job.id} job={job}/>)
-                      }
-                    </TableBody>
-                  </Table>
-                  <Pagination page={page} total={filteredJobs.length} pageSize={PAGE_SIZE} onChange={setPage}/>
-                </div>
-              </TabsContent>
+                <TabsContent key={tab} value={tab} className="mt-0">
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[220px]">Distributor</TableHead>
+                          <TableHead className="w-[120px]">Status</TableHead>
+                          <TableHead className="w-[140px]">Time</TableHead>
+                          <TableHead className="w-[90px]">Duration</TableHead>
+                          <TableHead className="max-w-[300px]">Summary</TableHead>
+                          <TableHead className="w-[100px]"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pagedJobs.length === 0
+                          ? <TableRow><TableCell colSpan={6} className="h-32 text-center text-sm text-muted-foreground">Tidak ada data.</TableCell></TableRow>
+                          : pagedJobs.map(job => <JobRow key={job.id} job={job}/>)
+                        }
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <JobsPagination page={page} total={filteredJobs.length} pageSize={PAGE_SIZE} onChange={setPage}/>
+                </TabsContent>
             ))}
           </Tabs>
         )}
