@@ -173,6 +173,13 @@ export async function closeBrowser(username: string, force = false): Promise<voi
   } catch (e) {
     console.error(`[Browser:${username}] Failed to close gracefully:`, e)
   } finally {
+    pool.delete(username);
+    const queue = getWaitQueue();
+    const nextItem = queue.shift();
+    if (nextItem) {
+      console.log("[BrowserPool] Dequeuing next browser request from queue.");
+      nextItem.resolve();
+    }
     // Force-kill semua child process Chromium (gpu-process, renderer, dll)
     // kalau browser.close() tidak cascade dengan benar
     try {
@@ -856,10 +863,11 @@ export async function executeStockAdjustment(
   rows: AdjustmentRow[],
   remark: string,
   onProgress: ProgressCallback
-): Promise<{ screenshotBase64: string; adjustedCount: number }> {
+): Promise<{ screenshotBase64: string; adjustedCount: number; failedSkus: { sku: string; error: string }[] }> {
   const { browser, page } = await getOrCreateBrowser(creds.username)
   let screenshotBase64 = ""
   let adjustedCount = 0
+  const failedSkus: { sku: string; error: string }[] = []
 
   try {
     await login(page, creds, onProgress)

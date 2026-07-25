@@ -160,7 +160,7 @@ export default function InventoryAdjustmentPage() {
       const resp = await fetch("/api/inventory/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ warehouseCode: distributor?.warehouse ?? "", username: distributor?.username ?? "" }),
+        body: JSON.stringify({ warehouseCode: distributor?.warehouse_code ?? "", username: distributor?.username ?? "" }),
         signal: abortControllerRef.current.signal,
       })
       const reader = resp.body!.getReader()

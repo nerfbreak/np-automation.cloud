@@ -252,7 +252,7 @@ export function AppSidebar() {
               <span className="text-sm font-bold text-white leading-tight capitalize truncate max-w-[80px]">
                 {username}
               </span>
-              <span className="text-[9px] text-zinc-400 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded font-medium">
+              <span className="text-[9px] text-zinc-400 bg-zinc-900 border border-zinc-800 px-1 h-3.5 flex items-center justify-center rounded font-medium leading-none">
                 {getRoleLabel(username)}
               </span>
             </div>
