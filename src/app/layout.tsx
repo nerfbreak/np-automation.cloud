@@ -6,11 +6,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 
-const sourceSans3 = Source_Sans_3({subsets:['latin'],variable:'--font-sans'});
-
 const sourceSans3 = Source_Sans_3({
-  variable: "--font-source-sans-3",
   subsets: ["latin"],
+  variable: "--font-sans",
 });
 
 const geistMono = Geist_Mono({

@@ -109,7 +109,7 @@ export default function LoginPage() {
         <CardContent className="space-y-4">
           {/* Warning: sisa percobaan */}
           {attemptsLeft !== null && attemptsLeft > 0 && !locked && (
-            <Alert variant="warning">
+            <Alert className="border-amber-500/50 bg-amber-50 text-amber-900 dark:bg-amber-950/20 dark:text-amber-400 *:[svg]:text-amber-500">
               <AlertTriangle />
               <AlertTitle>Login Gagal</AlertTitle>
               <AlertDescription>
