@@ -296,8 +296,13 @@ async function handleTelegramUpdate(update: any) {
   const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return
 
+  console.log(`[TelegramBot] Received update:`, JSON.stringify(update))
+  console.log(`[TelegramBot] Configured ChatID: "${TELEGRAM_CHAT_ID}"`)
+
   const chatId = update.message?.chat?.id?.toString() || update.callback_query?.message?.chat?.id?.toString()
   const fromId = update.message?.from?.id?.toString() || update.callback_query?.from?.id?.toString()
+
+  console.log(`[TelegramBot] Detected chatId: "${chatId}", fromId: "${fromId}"`)
 
   if (chatId !== TELEGRAM_CHAT_ID && fromId !== TELEGRAM_CHAT_ID) {
     console.log(`[TelegramBot] Unauthorized message/callback from chat:${chatId}, user:${fromId}`);
