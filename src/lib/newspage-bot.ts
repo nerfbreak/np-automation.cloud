@@ -902,6 +902,8 @@ export async function executeStockAdjustment(
         message: `[${i + 1}/${rows.length}] Input SKU: ${row.sku}`,
       })
 
+      try {
+
       // Tunggu sampai input SKU muncul (buat jaga-jaga kalau server lambat ngerender ulang setelah tombol Add ditekan)
       await waitForElement(page, "pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value", 20000)
       await page.waitForTimeout(300) // Kasih napas dikit sebelum ngetik SKU
@@ -971,7 +973,40 @@ export async function executeStockAdjustment(
         message: `[${i + 1}/${rows.length}] ✓ ${row.sku} — ${row.qty} EA tersimpan`,
       })
       adjustedCount++
+      } catch (err: any) {
+        const errMsg = err.message || String(err)
+        onProgress({
+          type: "progress",
+          sku: row.sku,
+          status: "error",
+          index: i,
+          total: rows.length,
+          message: `[${i + 1}/${rows.length}] ❌ SKU ${row.sku} gagal: ${errMsg}`,
+        })
+        failedSkus.push({ sku: row.sku, error: errMsg })
+        
+        // Coba bersihkan/kosongkan input SKU agar input berikutnya tidak menumpuk/kacau
+        try {
+          const frame = await findFrame(page, "pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value")
+          const skuInput = frame.locator("#pag_I_StkAdj_NewGeneral_sel_PRD_CD_Value")
+          await skuInput.click({ force: true }).catch(() => {})
+          await skuInput.fill("").catch(() => {})
+          const yesBtn = frame.locator("[id$='pag_PopUp_YesNo_btn_Yes_Value']").first()
+          if (await yesBtn.isVisible().catch(() => false)) {
+            await yesBtn.click().catch(() => {})
+            await smartWait(page)
+          }
+        } catch (cleanupErr) {
+          console.error("Gagal membersihkan input SKU setelah error:", cleanupErr)
+        }
+      }
+
     }
+
+    if (adjustedCount === 0) {
+      throw new Error(`Semua SKU (${rows.length}) ditolak atau gagal diproses. Eksekusi dibatalkan.`)
+    }
+
 
     onProgress({ type: "log", message: "Menyimpan seluruh dokumen Stock Adjustment..." })
     await jsClick(page, "pag_I_StkAdj_NewGeneral_btn_Save_Value")
@@ -1026,7 +1061,7 @@ export async function executeStockAdjustment(
     onProgress({ type: "screenshot", screenshotBase64, message: "Screenshot bukti berhasil diambil." })
 
     onProgress({ type: "done", message: "Eksekusi selesai." })
-    return { screenshotBase64, adjustedCount }
+    return { screenshotBase64, adjustedCount, failedSkus }
   } catch (e: any) {
     onProgress({ type: "error", message: e.message || String(e) })
     throw e

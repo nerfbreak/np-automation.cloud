@@ -399,7 +399,7 @@ async function handleTelegramUpdate(update: any) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(60000)
+          signal: AbortSignal.timeout(180000)
         })
 
         if (!aiResp.ok) {
