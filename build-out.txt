@@ -1,0 +1,70 @@
+$ next build
+▲ Next.js 16.2.10 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 17.6s
+  Skipping validation of types
+  Finished TypeScript config validation in 50ms ...
+  Collecting page data using 3 workers ...
+It is highly recommended to use a minimum Redis version of 6.2.0
+             Current: 5.0.14.1
+It is highly recommended to use a minimum Redis version of 6.2.0
+             Current: 5.0.14.1
+  Generating static pages using 3 workers (0/31) ...
+It is highly recommended to use a minimum Redis version of 6.2.0
+             Current: 5.0.14.1
+It is highly recommended to use a minimum Redis version of 6.2.0
+             Current: 5.0.14.1
+  Generating static pages using 3 workers (7/31) 
+It is highly recommended to use a minimum Redis version of 6.2.0
+             Current: 5.0.14.1
+It is highly recommended to use a minimum Redis version of 6.2.0
+             Current: 5.0.14.1
+  Generating static pages using 3 workers (15/31) 
+  Generating static pages using 3 workers (23/31) 
+✓ Generating static pages using 3 workers (31/31) in 1432ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/audit-logs
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/distributors
+├ ƒ /api/inventory/execute
+├ ƒ /api/inventory/extract
+├ ƒ /api/inventory/rules
+├ ƒ /api/jobs
+├ ƒ /api/jobs/[id]/cancel
+├ ƒ /api/master-data/sku-exceptions
+├ ƒ /api/master-data/sku-multipliers
+├ ƒ /api/system/stats
+├ ○ /automations
+├ ƒ /automations/[id]
+├ ƒ /automations/[id]/edit
+├ ○ /automations/new
+├ ○ /changelog
+├ ○ /credentials
+├ ○ /data-tools
+├ ○ /inventory-adjustment
+├ ○ /login
+├ ○ /master-data
+├ ○ /master-data/distributor-credentials
+├ ○ /master-data/sku-exceptions
+├ ○ /master-data/sku-multipliers
+├ ○ /report
+├ ○ /schedules
+├ ○ /settings
+├ ○ /settings/audit-logs
+├ ○ /tasks
+└ ○ /templates
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+DONE 
