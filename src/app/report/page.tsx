@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
@@ -7,7 +7,8 @@ import { MetricCard } from "@/components/data-display/metric-card";
 import { StatusBadge } from "@/components/feedback/status-badge";
 import { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow, differenceInMinutes, differenceInSeconds } from "date-fns";
-import { Download, Copy, Image as ImageIcon, CheckCircle2, XCircle, TrendingUp, FileText, Inbox } from "lucide-react";
+import { Download, Copy, Image as ImageIcon, CheckCircle2, XCircle, TrendingUp, FileText, Inbox, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -16,7 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { copyJobResultText, copyJobResultImage } from "@/lib/utils";
@@ -36,6 +37,7 @@ export default function ReportPage() {
   const [jobs, setJobs] = useState<RealJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>("all");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -261,11 +263,14 @@ export default function ReportPage() {
   const failedCount = jobs.filter(j => j.status === "FAILED").length;
   const successRate = jobs.length > 0 ? Math.round((completedCount / jobs.length) * 100) : 0;
 
-  const filteredJobs = activeTab === "all"
+  const filteredJobs = (activeTab === "all"
     ? jobs
     : activeTab === "completed"
       ? jobs.filter(j => j.status === "COMPLETED")
-      : jobs.filter(j => j.status === "FAILED");
+      : jobs.filter(j => j.status === "FAILED")
+  ).filter(j =>
+    (j.distributor_name || j.distributor_username).toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <AppShell breadcrumbs={[{ label: "Report" }]}>
@@ -318,57 +323,63 @@ export default function ReportPage() {
             />
           </div>
         )}
-
         {/* Tabs + Table */}
-        <div className="mt-2">
-          {isLoading ? (
+        {isLoading ? (
+          <Card>
+            <CardContent className="py-8">
+              <div className="space-y-3">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            </CardContent>
+          </Card>
+        ) : jobs.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="rounded-full bg-muted p-4 mb-4">
+                <Inbox className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold mb-1">No completed jobs yet</h3>
+              <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+                Completed and failed jobs will appear here after processing.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Tabs defaultValue="all" onValueChange={(v) => { setActiveTab(v); setSearch(""); }}>
             <Card>
-              <CardContent className="py-8">
-                <div className="space-y-3">
-                  <Skeleton className="h-8 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
+              <CardHeader className="flex flex-row items-center justify-between gap-4 py-3 px-4">
+                <TabsList className="h-9">
+                  <TabsTrigger value="all">All ({jobs.length})</TabsTrigger>
+                  <TabsTrigger value="completed">Completed ({completedCount})</TabsTrigger>
+                  <TabsTrigger value="failed">Failed ({failedCount})</TabsTrigger>
+                </TabsList>
+                <div className="relative w-[220px]">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search distributor..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-8 h-9"
+                  />
                 </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <TabsContent value="all" className="mt-0">
+                  <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
+                </TabsContent>
+                <TabsContent value="completed" className="mt-0">
+                  <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
+                </TabsContent>
+                <TabsContent value="failed" className="mt-0">
+                  <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
+                </TabsContent>
               </CardContent>
             </Card>
-          ) : jobs.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="rounded-full bg-muted p-4 mb-4">
-                  <Inbox className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-semibold mb-1">No completed jobs yet</h3>
-                <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-                  Completed and failed jobs will appear here after processing.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <Tabs defaultValue="all" onValueChange={setActiveTab}>
-              <TabsList>
-                <TabsTrigger value="all">
-                  All ({jobs.length})
-                </TabsTrigger>
-                <TabsTrigger value="completed">
-                  Completed ({completedCount})
-                </TabsTrigger>
-                <TabsTrigger value="failed">
-                  Failed ({failedCount})
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="all">
-                <DataTable columns={columns} data={filteredJobs} searchKey="distributor_username" searchPlaceholder="Search distributor..." defaultPageSize={10} />
-              </TabsContent>
-              <TabsContent value="completed">
-                <DataTable columns={columns} data={filteredJobs} searchKey="distributor_username" searchPlaceholder="Search distributor..." defaultPageSize={10} />
-              </TabsContent>
-              <TabsContent value="failed">
-                <DataTable columns={columns} data={filteredJobs} searchKey="distributor_username" searchPlaceholder="Search distributor..." defaultPageSize={10} />
-              </TabsContent>
-            </Tabs>
-          )}
-        </div>
+          </Tabs>
+        )}
       </div>
     </AppShell>
   );

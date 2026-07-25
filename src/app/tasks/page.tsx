@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
@@ -7,7 +7,7 @@ import { MetricCard } from "@/components/data-display/metric-card";
 import { StatusBadge } from "@/components/feedback/status-badge";
 import { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow, differenceInMinutes, differenceInSeconds } from "date-fns";
-import { Copy, Download, Image as ImageIcon, Ban, Clock, Play, Inbox, RefreshCcw } from "lucide-react";
+import { Copy, Download, Image as ImageIcon, Ban, Clock, Play, Inbox, RefreshCcw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -24,7 +24,8 @@ import {
   DialogTitle,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -47,6 +48,7 @@ export default function TasksPage() {
   const [cancelJobId, setCancelJobId] = useState<string | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("all");
+  const [search, setSearch] = useState<string>("");
 
   const handleCancelJob = async (jobId: string) => {
     setCancelDialogOpen(false);
@@ -94,11 +96,14 @@ export default function TasksPage() {
   const pendingCount = jobs.filter(j => j.status === "PENDING").length;
   const runningCount = jobs.filter(j => j.status === "RUNNING").length;
 
-  const filteredJobs = activeTab === "all"
+  const filteredJobs = (activeTab === "all"
     ? jobs
     : activeTab === "pending"
       ? jobs.filter(j => j.status === "PENDING")
-      : jobs.filter(j => j.status === "RUNNING");
+      : jobs.filter(j => j.status === "RUNNING")
+  ).filter(j =>
+    (j.distributor_name || j.distributor_username).toLowerCase().includes(search.toLowerCase())
+  );
 
   const columns: ColumnDef<RealJob>[] = [
     {
@@ -381,59 +386,64 @@ export default function TasksPage() {
         )}
 
         {/* Tabs + Table */}
-        <div className="mt-2">
-          {isLoading ? (
+        {isLoading ? (
+          <Card>
+            <CardContent className="py-8">
+              <div className="space-y-3">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            </CardContent>
+          </Card>
+        ) : jobs.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="rounded-full bg-muted p-4 mb-4">
+                <Inbox className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold mb-1">No active tasks</h3>
+              <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+                All operations have completed. Start a new inventory adjustment to see tasks here.
+              </p>
+              <Button render={<a href="/inventory-adjustment" />}>
+                Start New Adjustment
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Tabs defaultValue="all" onValueChange={(v) => { setActiveTab(v); setSearch(""); }}>
             <Card>
-              <CardContent className="py-8">
-                <div className="space-y-3">
-                  <Skeleton className="h-8 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
+              <CardHeader className="flex flex-row items-center justify-between gap-4 py-3 px-4">
+                <TabsList className="h-9">
+                  <TabsTrigger value="all">All ({jobs.length})</TabsTrigger>
+                  <TabsTrigger value="pending">Pending ({pendingCount})</TabsTrigger>
+                  <TabsTrigger value="running">Running ({runningCount})</TabsTrigger>
+                </TabsList>
+                <div className="relative w-[220px]">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search distributor..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-8 h-9"
+                  />
                 </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <TabsContent value="all" className="mt-0">
+                  <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
+                </TabsContent>
+                <TabsContent value="pending" className="mt-0">
+                  <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
+                </TabsContent>
+                <TabsContent value="running" className="mt-0">
+                  <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
+                </TabsContent>
               </CardContent>
             </Card>
-          ) : jobs.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="rounded-full bg-muted p-4 mb-4">
-                  <Inbox className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-semibold mb-1">No active tasks</h3>
-                <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-                  All operations have completed. Start a new inventory adjustment to see tasks here.
-                </p>
-                <Button
-                  render={<a href="/inventory-adjustment" />}
-                >
-                  Start New Adjustment
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <Tabs defaultValue="all" onValueChange={setActiveTab}>
-              <TabsList>
-                <TabsTrigger value="all">
-                  All ({jobs.length})
-                </TabsTrigger>
-                <TabsTrigger value="pending">
-                  Pending ({pendingCount})
-                </TabsTrigger>
-                <TabsTrigger value="running">
-                  Running ({runningCount})
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="all">
-                <DataTable columns={columns} data={filteredJobs} searchKey="distributor_username" searchPlaceholder="Search distributor..." defaultPageSize={10} />
-              </TabsContent>
-              <TabsContent value="pending">
-                <DataTable columns={columns} data={filteredJobs} searchKey="distributor_username" searchPlaceholder="Search distributor..." defaultPageSize={10} />
-              </TabsContent>
-              <TabsContent value="running">
-                <DataTable columns={columns} data={filteredJobs} searchKey="distributor_username" searchPlaceholder="Search distributor..." defaultPageSize={10} />
-              </TabsContent>
-            </Tabs>
-          )}
-        </div>
+          </Tabs>
+        )}
       </div>
 
       {/* Cancel Confirmation Dialog */}
