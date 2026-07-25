@@ -39,6 +39,7 @@ jobs:
             cd /home/rizki/np-automation
             git fetch origin
             git reset --hard origin/master
+            npm install --legacy-peer-deps
             npm run build
             pm2 restart ecosystem.config.js
             echo "Deployment completed successfully!"

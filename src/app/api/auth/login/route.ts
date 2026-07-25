@@ -94,12 +94,21 @@ export async function POST(req: Request) {
 
     const response = NextResponse.json({ success: true, user: { username: identifier, role } });
 
-    // Cookie valid 7 hari
+    // Store refresh_token so we can refresh expired access_token
+    // access_token expires in 1h (Supabase default), refresh_token valid 7d
     response.cookies.set("np_session", data.session.access_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 60 * 60,          // 1 jam — sesuai Supabase access_token expiry
+      path: "/",
+    });
+
+    response.cookies.set("np_refresh", data.session.refresh_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 hari — sesuai Supabase refresh_token
       path: "/",
     });
 

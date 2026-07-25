@@ -349,6 +349,10 @@ async function handleTelegramUpdate(update: any) {
           sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `✅ Berhasil restart 'np-web'!\n${stdout || stderr}`)
         }
       })
+    } else if (data === "restart_worker") {
+      console.log("[TelegramBot] Restart Worker triggered via button")
+      await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "⏳ Menjalankan `pm2 restart np-worker` di VPS...\n(Bot mungkin offline sejenak, akan kembali aktif otomatis)")
+      exec("pm2 restart np-worker", () => { /* bot will restart, no callback */ })
     } else if (data === "pm2_status") {
       console.log("[TelegramBot] PM2 Status triggered via button")
       exec("pm2 status", (err, stdout, stderr) => {
@@ -400,7 +404,7 @@ async function handleTelegramUpdate(update: any) {
           method: "POST",
           headers: { "Content-Type": "application/json", "Accept": "application/json" },
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(180000)
+          signal: AbortSignal.timeout(120000)
         })
 
         if (!aiResp.ok) {
@@ -422,13 +426,31 @@ async function handleTelegramUpdate(update: any) {
             if (jsonStr === "[DONE]") break
             try {
               const chunk = JSON.parse(jsonStr)
-              const delta = chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.message?.content ?? ""
+              // Handle both streaming delta and non-streaming message format
+              const delta = chunk.choices?.[0]?.delta?.content
+                ?? chunk.choices?.[0]?.message?.content
+                ?? ""
               if (delta) accumulated += delta
             } catch { /* skip malformed chunk */ }
           }
+          // If SSE parsing got nothing, try parsing first data line as full JSON
+          if (!accumulated) {
+            try {
+              const firstLine = rawText.split("\n").find(l => l.trim().startsWith("data:"))
+              if (firstLine) {
+                const j = JSON.parse(firstLine.trim().slice(5).trim())
+                accumulated = j.choices?.[0]?.message?.content ?? j.choices?.[0]?.text ?? ""
+              }
+            } catch { /* ignore */ }
+          }
           dataJson = { choices: [{ message: { content: accumulated } }] }
         } else {
-          dataJson = JSON.parse(rawText)
+          try {
+            dataJson = JSON.parse(rawText)
+          } catch {
+            // Raw text itself might be the code output
+            dataJson = { choices: [{ message: { content: rawText } }] }
+          }
         }
 
         let resultText = dataJson.choices?.[0]?.message?.content
@@ -668,7 +690,7 @@ async function handleTelegramUpdate(update: any) {
         sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ **Gagal rerun Actions:** ${err.message}`)
       }
     } else if (text.startsWith("/help") || text === "help") {
-      const helpMsg = `🤖 **NP Automation Admin Bot**\nKirim perintah berikut untuk mengoperasikan VPS:\n- /restart: Restart web server\n- /status: Cek status PM2\n- /logs: Log error web server terkini\n- /build: Build & fix NextJS (Fix 502)\n- /code <jalur_file> <instruksi>: Inject fitur via AI OmniRoute\n- /actions: Lihat 5 GitHub Actions runs terakhir\n- /rerun: Rerun job GitHub Actions yang terakhir gagal\n- /help: Tampilkan menu bantuan ini`
+      const helpMsg = `🤖 **NP Automation Admin Bot**\nKirim perintah berikut untuk mengoperasikan VPS:\n- /restart: Restart web server (np-web)\n- /restart worker: Restart np-worker (bot ini)\n- /status: Cek status PM2\n- /logs: Log error web server terkini\n- /build: Build & fix NextJS (Fix 502)\n- /code <jalur_file> <instruksi>: Inject fitur via AI OmniRoute\n- /actions: Lihat 5 GitHub Actions runs terakhir\n- /rerun: Rerun job GitHub Actions yang terakhir gagal\n- /help: Tampilkan menu bantuan ini`
       sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, helpMsg)
     }
   }
@@ -756,7 +778,7 @@ async function executeBuildPipeline(token: string, chatId: string) {
 
   // Step 2: npm install (agar package baru ikut terinstall)
   await new Promise<void>((resolve, reject) => {
-    const install = spawn("npm", ["install", "--prefer-offline"], {
+    const install = spawn("npm", ["install", "--legacy-peer-deps"], {
       cwd: "/home/rizki/np-automation",
       shell: true,
     })
@@ -846,6 +868,9 @@ async function executeBuildPipeline(token: string, chatId: string) {
                   ],
                   [
                     { text: "🔄 Restart Web", callback_data: "restart_web" },
+                    { text: "🔄 Restart Worker", callback_data: "restart_worker" }
+                  ],
+                  [
                     { text: "📊 Status", callback_data: "pm2_status" },
                     { text: "📋 Web Logs", callback_data: "web_logs" }
                   ]
