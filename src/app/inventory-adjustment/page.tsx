@@ -710,7 +710,7 @@ export default function InventoryAdjustmentPage() {
               <>
                 {/* Step 1 – Select Distributor */}
                 {step === 1 && (
-                  <div className="space-y-3 pb-[200px]">
+                  <div className="space-y-3">
                     <Combobox 
                       items={distributors}
                       itemToStringLabel={(item: any) => item ? item.name : ""}
