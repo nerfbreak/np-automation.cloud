@@ -349,35 +349,31 @@ export default function ReportPage() {
           </Card>
         ) : (
           <Tabs defaultValue="all" onValueChange={(v) => { setActiveTab(v); setSearch(""); }}>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-4 py-3 px-4">
-                <TabsList className="h-9">
-                  <TabsTrigger value="all">All ({jobs.length})</TabsTrigger>
-                  <TabsTrigger value="completed">Completed ({completedCount})</TabsTrigger>
-                  <TabsTrigger value="failed">Failed ({failedCount})</TabsTrigger>
-                </TabsList>
-                <div className="relative w-[220px]">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search distributor..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="pl-8 h-9"
-                  />
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <TabsContent value="all" className="mt-0">
-                  <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
-                </TabsContent>
-                <TabsContent value="completed" className="mt-0">
-                  <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
-                </TabsContent>
-                <TabsContent value="failed" className="mt-0">
-                  <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
-                </TabsContent>
-              </CardContent>
-            </Card>
+            <div className="flex items-center justify-between mb-3">
+              <TabsList>
+                <TabsTrigger value="all">All ({jobs.length})</TabsTrigger>
+                <TabsTrigger value="completed">Completed ({completedCount})</TabsTrigger>
+                <TabsTrigger value="failed">Failed ({failedCount})</TabsTrigger>
+              </TabsList>
+              <div className="relative w-[220px]">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search distributor..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-8 h-9"
+                />
+              </div>
+            </div>
+            <TabsContent value="all" className="mt-0">
+              <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
+            </TabsContent>
+            <TabsContent value="completed" className="mt-0">
+              <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
+            </TabsContent>
+            <TabsContent value="failed" className="mt-0">
+              <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
+            </TabsContent>
           </Tabs>
         )}
       </div>
