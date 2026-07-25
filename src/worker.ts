@@ -67,7 +67,7 @@ const worker = new Worker(
       }
 
       // 5. Execute Bot
-      const { screenshotBase64, adjustedCount } = await executeStockAdjustment(
+      const { screenshotBase64, adjustedCount, failedSkus } = await executeStockAdjustment(
         { username: distributor.username, password: plainPassword },
         rows,
         remark,
@@ -112,9 +112,16 @@ const worker = new Worker(
       // Kill browser setelah job selesai untuk free RAM di VPS
       await closeBrowser(distributor.username, true).catch(() => {})
 
+      const isPartial = failedSkus && failedSkus.length > 0
+      const failedListStr = isPartial ? failedSkus.map(item => item.sku).join(', ') : ''
+      const summaryMsgBase = isPartial
+        ? `⚠️ Partial: ${adjustedCount} dari ${rows.length} SKU berhasil. Gagal ${failedSkus.length} SKU (${failedListStr}).`
+        : `Successfully adjusted all ${adjustedCount} rows.`
+
+
       const summaryMsg = screenshotBase64 
-        ? `Successfully adjusted ${adjustedCount} rows. [SCREENSHOT_READY]` 
-        : `Successfully adjusted ${adjustedCount} rows.`
+        ? `${summaryMsgBase} [SCREENSHOT_READY]` 
+        : summaryMsgBase
 
       // 6. Update status to COMPLETED
       await supabaseAdmin
@@ -158,6 +165,12 @@ const worker = new Worker(
             const blob = new Blob([byteArray], { type: 'image/png' })
 
             formData.append('photo', blob, 'screenshot.png')
+            formData.append('reply_markup', JSON.stringify({
+              inline_keyboard: [[
+                { text: "🔄 Restart Web (Fix 502)", callback_data: "restart_web" },
+                { text: "📊 PM2 Status", callback_data: "pm2_status" }
+              ]]
+            }))
 
             const tgResp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
               method: 'POST',
@@ -179,6 +192,12 @@ const worker = new Worker(
               body: JSON.stringify({
                 chat_id: TELEGRAM_CHAT_ID,
                 text: caption,
+                reply_markup: {
+                  inline_keyboard: [[
+                    { text: "🔄 Restart Web (Fix 502)", callback_data: "restart_web" },
+                    { text: "📊 PM2 Status", callback_data: "pm2_status" }
+                  ]]
+                }
               }),
             })
             if (tgResp.ok) {
@@ -234,6 +253,12 @@ const worker = new Worker(
             body: JSON.stringify({
               chat_id: TELEGRAM_CHAT_ID,
               text: caption,
+              reply_markup: {
+                inline_keyboard: [[
+                  { text: "🔄 Restart Web (Fix 502)", callback_data: "restart_web" },
+                  { text: "📊 PM2 Status", callback_data: "pm2_status" }
+                ]]
+              }
             }),
           })
           if (tgResp.ok) {
@@ -262,3 +287,122 @@ worker.on('failed', (job, err) => {
 worker.on('error', err => {
   console.error("Worker error:", err)
 })
+
+
+import { exec } from 'child_process'
+
+async function handleTelegramUpdate(update: any) {
+  const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+  const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return
+
+  const chatId = update.message?.chat?.id?.toString() || update.callback_query?.message?.chat?.id?.toString()
+  const fromId = update.message?.from?.id?.toString() || update.callback_query?.from?.id?.toString()
+
+  if (chatId !== TELEGRAM_CHAT_ID && fromId !== TELEGRAM_CHAT_ID) {
+    console.log(`[TelegramBot] Unauthorized message/callback from chat:${chatId}, user:${fromId}`);
+    return
+  }
+
+  if (update.callback_query) {
+    const cq = update.callback_query
+    const data = cq.data
+    const cbQueryId = cq.id
+
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: cbQueryId })
+    }).catch(() => {})
+
+    if (data === "restart_web") {
+      console.log("[TelegramBot] Restart Web triggered via button")
+      await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "⏳ Menjalankan `pm2 restart np-web` di VPS...")
+      exec("pm2 restart np-web", (err, stdout, stderr) => {
+        if (err) {
+          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ Gagal restart: ${err.message}`)
+        } else {
+          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `✅ Berhasil restart 'np-web'!\n${stdout || stderr}`)
+        }
+      })
+    } else if (data === "pm2_status") {
+      console.log("[TelegramBot] PM2 Status triggered via button")
+      exec("pm2 status", (err, stdout, stderr) => {
+        const output = stdout || stderr || "No output"
+        const cleanOutput = output.substring(0, 3000)
+        sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `📊 **PM2 Status:**\n\`\`\`\n${cleanOutput}\n\`\`\``)
+      })
+    }
+  }
+
+  if (update.message?.text) {
+    const text = update.message.text.trim().toLowerCase()
+    
+    if (text.startsWith("/restart") || text === "restart" || text === "fix" || text.includes("502")) {
+      await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "⏳ Menjalankan `pm2 restart np-web` di VPS...")
+      exec("pm2 restart np-web", (err, stdout, stderr) => {
+        if (err) {
+          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ Gagal restart: ${err.message}`)
+        } else {
+          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `✅ Berhasil restart 'np-web'!\n${stdout || stderr}`)
+        }
+      })
+    } else if (text.startsWith("/status") || text === "status" || text === "pm2") {
+      exec("pm2 status", (err, stdout, stderr) => {
+        const output = stdout || stderr || "No output"
+        const cleanOutput = output.substring(0, 3000)
+        sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `📊 **PM2 Status:**\n\`\`\`\n${cleanOutput}\n\`\`\``)
+      })
+    } else if (text.startsWith("/help") || text === "help") {
+      const helpMsg = `🤖 **NP Automation Admin Bot**\nKirim perintah berikut untuk mengoperasikan VPS:\n- /restart atau tulis "restart": Restart web server\n- /status atau tulis "pm2": Cek status PM2\n- /help: Tampilkan menu bantuan ini`
+      sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, helpMsg)
+    }
+  }
+}
+
+async function sendTelegramMessage(token: string, chatId: string, text: string) {
+  return fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: text,
+      parse_mode: "Markdown"
+    })
+  }).catch(err => console.error("Failed to send message:", err))
+}
+
+let lastUpdateId = 0
+async function startTelegramPoller() {
+  const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+  const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.log("[TelegramBot] Poller skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured.")
+    return
+  }
+  
+  console.log("[TelegramBot] Starting long poller for admin commands...")
+  
+  while (true) {
+    try {
+      const resp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`, {
+        signal: AbortSignal.timeout(35000)
+      })
+      if (!resp.ok) {
+        await new Promise(resolve => setTimeout(resolve, 5000))
+        continue
+      }
+      const data = await resp.json()
+      if (data.ok && data.result.length > 0) {
+        for (const update of data.result) {
+          lastUpdateId = Math.max(lastUpdateId, update.update_id)
+          await handleTelegramUpdate(update)
+        }
+      }
+    } catch (err: any) {
+      await new Promise(resolve => setTimeout(resolve, 5000))
+    }
+  }
+}
+
+startTelegramPoller()
