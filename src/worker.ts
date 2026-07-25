@@ -469,8 +469,89 @@ async function handleTelegramUpdate(update: any) {
       })
     } else if (text.startsWith("/build") || text === "build") {
       executeBuildPipeline(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+    } else if (text.startsWith("/code") || text.split(" ")[0] === "code") {
+      const origMsg = update.message.text.trim()
+      const parts = origMsg.split(/\s+/)
+      // parts[0] is command /code
+      if (parts.length < 3) {
+        const errorMsg = "⚠️ **Format Salah!**\nGunakan format:\n`/code <jalur_file> <instruksi_fitur>`\n\nContoh:\n`/code src/lib/newspage-bot.ts tambahkan log ketika browser ditutup`"
+        sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, errorMsg)
+        return
+      }
+
+      const relativePath = parts[1]
+      const instructions = parts.slice(2).join(" ")
+      const fullPath = path.resolve("/home/rizki/np-automation", relativePath)
+
+      if (!fs.existsSync(fullPath)) {
+        sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ **File tidak ditemukan:** \`${relativePath}\`\nPastikan path relative dari repository root (contoh: \`src/worker.ts\`)`)
+        return
+      }
+
+      await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `🔮 **AI (OmniRoute) sedang merancang fitur...**\nFile: \`${relativePath}\`\nInstruksi: "${instructions}"`)
+
+      try {
+        const oldCode = fs.readFileSync(fullPath, "utf-8")
+        const payload = {
+          model: "auto",
+          messages: [
+            {
+              role: "system",
+              content: "You are a professional software engineer. Your task is to modify the provided source code based on the instructions. You must return ONLY the complete corrected TSX/TS/JS code. Do NOT wrap your output in conversational markdown, explanation, or notes. Do NOT include markdown code blocks like ```typescript or ``` unless for the code output, but it is preferred to output raw file content directly."
+            },
+            {
+              role: "user",
+              content: `File Path: ${relativePath}\n\nInstructions:\n${instructions}\n\nOriginal Code:\n\`\`\`\n${oldCode}\n\`\`\``
+            }
+          ],
+          temperature: 0.1
+        }
+
+        const aiResp = await fetch("http://localhost:20128/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(180000)
+        })
+
+        if (!aiResp.ok) {
+          throw new Error(`OmniRoute returned status ${aiResp.status}`)
+        }
+
+        const dataJson: any = await aiResp.json()
+        let resultText = dataJson.choices?.[0]?.message?.content
+        if (!resultText) {
+          throw new Error("Empty code result from OmniRoute.")
+        }
+
+        // Bersihkan Markdown block ```typescript .... ``` jika disisipkan oleh model LLM
+        if (resultText.includes("```")) {
+          const openMatch = resultText.match(/```[a-zA-Z0-9]*\r?\n/)
+          if (openMatch) {
+            const startIdx = resultText.indexOf(openMatch[0]) + openMatch[0].length
+            const endIdx = resultText.lastIndexOf("```")
+            if (endIdx > startIdx) {
+              resultText = resultText.substring(startIdx, endIdx).trim()
+            }
+          } else {
+            resultText = resultText.replace(/```/g, "").trim()
+          }
+        }
+
+        // Simpan perubahan ke file
+        fs.writeFileSync(fullPath, resultText, "utf-8")
+
+        await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `✅ **Fitur berhasil di-inject ke \`${relativePath}\`!**\nMemulai proses build otomatis...`)
+        
+        // Triger build pipeline
+        executeBuildPipeline(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+
+      } catch (err: any) {
+        console.error("AI Feature write error:", err)
+        await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ **Gagal menerapkan fitur:**\n${err.message}`)
+      }
     } else if (text.startsWith("/help") || text === "help") {
-      const helpMsg = `🤖 **NP Automation Admin Bot**\nKirim perintah berikut untuk mengoperasikan VPS:\n- /restart atau tulis "restart": Restart web server\n- /status atau tulis "pm2": Cek status PM2\n- /logs atau tulis "logs": Tampilkan log error terkini web server\n- /build atau tulis "build": Build & fix NextJS (Fix 502 build error)\n- /help: Tampilkan menu bantuan ini`
+      const helpMsg = `🤖 **NP Automation Admin Bot**\nKirim perintah berikut untuk mengoperasikan VPS:\n- /restart atau tulis "restart": Restart web server\n- /status atau tulis "pm2": Cek status PM2\n- /logs atau tulis "logs": Tampilkan log error terkini web server\n- /build atau tulis "build": Build & fix NextJS (Fix 502 build error)\n- /code <jalur_file> <instruksi>: Inject fitur baru ke file lewat AI OmniRoute\n- /help: Tampilkan menu bantuan ini`
       sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, helpMsg)
     }
   }
