@@ -4,11 +4,9 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { cn } from "@/lib/utils";
 
-const sourceSans = Source_Sans_3({
-  variable: "--font-sans",
-  subsets: ["latin"],
-});
+const sourceSans3 = Source_Sans_3({subsets:['latin'],variable:'--font-sans'});
 
 const sourceSans3 = Source_Sans_3({
   variable: "--font-source-sans-3",
@@ -39,7 +37,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${sourceSans.variable} ${sourceSans3.variable} ${geistMono.variable} ${jetbrainsMono.variable} h-full antialiased font-sans`}
+      className={cn("h-full", "antialiased", geistMono.variable, jetbrainsMono.variable, "font-sans", sourceSans3.variable)}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground" suppressHydrationWarning>
         <ThemeProvider
