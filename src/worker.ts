@@ -312,7 +312,8 @@ async function handleTelegramUpdate(update: any) {
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ callback_query_id: cbQueryId })
+      body: JSON.stringify({ callback_query_id: cbQueryId }),
+      signal: AbortSignal.timeout(5000)
     }).catch(() => {})
 
     if (data === "restart_web") {
@@ -368,7 +369,8 @@ async function sendTelegramMessage(token: string, chatId: string, text: string) 
       chat_id: chatId,
       text: text,
       parse_mode: "Markdown"
-    })
+    }),
+    signal: AbortSignal.timeout(5000)
   }).catch(err => console.error("Failed to send message:", err))
 }
 
