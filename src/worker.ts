@@ -550,8 +550,90 @@ async function handleTelegramUpdate(update: any) {
         console.error("AI Feature write error:", err)
         await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ **Gagal menerapkan fitur:**\n${err.message}`)
       }
+    } else if (text.startsWith("/actions") || text === "actions") {
+      const GITHUB_PAT = process.env.GITHUB_PAT
+      const GITHUB_REPO = process.env.GITHUB_REPO || "nerfbreak/np-automation.cloud"
+      if (!GITHUB_PAT) {
+        sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "❌ **GITHUB_PAT belum diset di .env.local VPS.**\nTambahkan `GITHUB_PAT=ghp_xxx` dan `GITHUB_REPO=owner/repo` dulu.")
+        return
+      }
+      try {
+        const resp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=5`, {
+          headers: {
+            "Authorization": `Bearer ${GITHUB_PAT}`,
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28"
+          },
+          signal: AbortSignal.timeout(10000)
+        })
+        if (!resp.ok) throw new Error(`GitHub API error: ${resp.status}`)
+        const data: any = await resp.json()
+        const runs = data.workflow_runs || []
+        if (runs.length === 0) {
+          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "📭 Tidak ada workflow runs yang ditemukan.")
+          return
+        }
+        const statusEmoji: Record<string, string> = {
+          success: "✅", failure: "❌", cancelled: "🚫", in_progress: "⏳", queued: "🕐", action_required: "⚠️", skipped: "⏭️"
+        }
+        const lines = runs.map((r: any) => {
+          const emoji = statusEmoji[r.conclusion || r.status] || "❓"
+          const date = new Date(r.created_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })
+          return `${emoji} *${r.name}* #${r.run_number}\nStatus: \`${r.conclusion || r.status}\`\nCommit: \`${r.head_commit?.message?.substring(0, 40) || "-"}\`\nWaktu: ${date}\nID: \`${r.id}\``
+        }).join("\n\n")
+        sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `📋 *5 GitHub Actions Terakhir:*\n\n${lines}`)
+      } catch (err: any) {
+        sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ **Gagal ambil data Actions:** ${err.message}`)
+      }
+    } else if (text.startsWith("/rerun") || text === "rerun") {
+      const GITHUB_PAT = process.env.GITHUB_PAT
+      const GITHUB_REPO = process.env.GITHUB_REPO || "nerfbreak/np-automation.cloud"
+      if (!GITHUB_PAT) {
+        sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "❌ **GITHUB_PAT belum diset di .env.local VPS.**\nTambahkan `GITHUB_PAT=ghp_xxx` dan `GITHUB_REPO=owner/repo` dulu.")
+        return
+      }
+      try {
+        await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "🔍 Mencari run yang gagal terakhir di GitHub Actions...")
+        // Ambil 10 runs terbaru untuk dicari yang gagal
+        const resp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=10`, {
+          headers: {
+            "Authorization": `Bearer ${GITHUB_PAT}`,
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28"
+          },
+          signal: AbortSignal.timeout(10000)
+        })
+        if (!resp.ok) throw new Error(`GitHub API error: ${resp.status}`)
+        const data: any = await resp.json()
+        const runs = data.workflow_runs || []
+        // Cari run yang gagal / cancelled / action_required
+        const failedRun = runs.find((r: any) => ["failure", "cancelled", "action_required", "timed_out"].includes(r.conclusion))
+        if (!failedRun) {
+          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "✅ Tidak ada run yang gagal! Semua GitHub Actions berjalan normal.")
+          return
+        }
+        // Rerun hanya job yang gagal
+        const rerunResp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${failedRun.id}/rerun-failed-jobs`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${GITHUB_PAT}`,
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Content-Length": "0"
+          },
+          signal: AbortSignal.timeout(10000)
+        })
+        if (rerunResp.status === 201 || rerunResp.status === 204 || rerunResp.ok) {
+          sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `🔄 *Rerun berhasil dipicu!*\n\nWorkflow: \`${failedRun.name}\` #${failedRun.run_number}\nConclusion sebelumnya: \`${failedRun.conclusion}\`\nCommit: \`${failedRun.head_commit?.message?.substring(0, 50) || "-"}\`\n\nCek progres: /actions`)
+        } else {
+          const errBody = await rerunResp.text()
+          throw new Error(`Rerun API error ${rerunResp.status}: ${errBody.substring(0, 200)}`)
+        }
+      } catch (err: any) {
+        sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ **Gagal rerun Actions:** ${err.message}`)
+      }
     } else if (text.startsWith("/help") || text === "help") {
-      const helpMsg = `🤖 **NP Automation Admin Bot**\nKirim perintah berikut untuk mengoperasikan VPS:\n- /restart atau tulis "restart": Restart web server\n- /status atau tulis "pm2": Cek status PM2\n- /logs atau tulis "logs": Tampilkan log error terkini web server\n- /build atau tulis "build": Build & fix NextJS (Fix 502 build error)\n- /code <jalur_file> <instruksi>: Inject fitur baru ke file lewat AI OmniRoute\n- /help: Tampilkan menu bantuan ini`
+      const helpMsg = `🤖 **NP Automation Admin Bot**\nKirim perintah berikut untuk mengoperasikan VPS:\n- /restart: Restart web server\n- /status: Cek status PM2\n- /logs: Log error web server terkini\n- /build: Build & fix NextJS (Fix 502)\n- /code <jalur_file> <instruksi>: Inject fitur via AI OmniRoute\n- /actions: Lihat 5 GitHub Actions runs terakhir\n- /rerun: Rerun job GitHub Actions yang terakhir gagal\n- /help: Tampilkan menu bantuan ini`
       sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, helpMsg)
     }
   }
