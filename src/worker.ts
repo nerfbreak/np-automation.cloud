@@ -383,6 +383,20 @@ async function startTelegramPoller() {
   
   console.log("[TelegramBot] Starting long poller for admin commands...")
   
+  // Skip old updates by getting the latest update first
+  try {
+    const initResp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?offset=-1&limit=1`)
+    if (initResp.ok) {
+      const initData = await initResp.json()
+      if (initData.ok && initData.result && initData.result.length > 0) {
+        lastUpdateId = initData.result[0].update_id
+        console.log(`[TelegramBot] Initialized lastUpdateId to ${lastUpdateId} (skipping old updates)`);
+      }
+    }
+  } catch (initErr) {
+    console.error("[TelegramBot] Failed to skip old updates:", initErr)
+  }
+  
   while (true) {
     try {
       const resp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`, {
