@@ -366,6 +366,80 @@ async function handleTelegramUpdate(update: any) {
     } else if (data === "build_web") {
       console.log("[TelegramBot] Build Web triggered via button")
       executeBuildPipeline(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+    } else if (data === "ai_autofix") {
+      console.log("[TelegramBot] AI Auto-Fix triggered via button")
+      if (!lastBuildError) {
+        await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "❌ **Tidak ada cache error log terakhir.** Silakan jalankan `/build` terlebih dahulu.")
+        return
+      }
+
+      await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `🔮 **Menghubungi AI (OmniRoute)...**\nMenganalisis error di file \`${path.basename(lastBuildError.filePath)}\`...`)
+      
+      const fileToFix = lastBuildError.filePath
+      const oldCode = lastBuildError.fileContent
+      const compilerError = lastBuildError.errorMsg
+
+      const payload = {
+        model: "auto",
+        messages: [
+          {
+            role: "system",
+            content: "You are a professional Next.js & TypeScript compiler fixer. Your task is to fix the compiler query errors in the provided source file. You must return ONLY the complete corrected TSX/TS code. Do NOT wrap your output in conversational markdown, explanation, or notes. Do NOT include markdown code blocks like ```typescript or ``` unless for the code output, but it is preferred to output raw file content directly."
+          },
+          {
+            role: "user",
+            content: `Source File Path: ${fileToFix}\n\nCompiler Error Log:\n${compilerError}\n\nOriginal Code:\n\`\`\`typescript\n${oldCode}\n\`\`\``
+          }
+        ],
+        temperature: 0.1
+      }
+
+      try {
+        const aiResp = await fetch("http://localhost:20128/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(60000)
+        })
+
+        if (!aiResp.ok) {
+          throw new Error(`OmniRoute returned status ${aiResp.status}`)
+        }
+
+        const dataJson: any = await aiResp.json()
+        let resultText = dataJson.choices?.[0]?.message?.content
+        if (!resultText) {
+          throw new Error("Empty completion result from OmniRoute.")
+        }
+
+        // Bersihkan Markdown block ```typescript .... ``` jika disisipkan oleh model LLM
+        if (resultText.includes("```")) {
+          // Cari block pembuka
+          const openMatch = resultText.match(/```[a-zA-Z0-9]*\r?\n/)
+          if (openMatch) {
+            const startIdx = resultText.indexOf(openMatch[0]) + openMatch[0].length
+            const endIdx = resultText.lastIndexOf("```")
+            if (endIdx > startIdx) {
+              resultText = resultText.substring(startIdx, endIdx).trim()
+            }
+          } else {
+            // Hapus semua strip backticks
+            resultText = resultText.replace(/```/g, "").trim()
+          }
+        }
+
+        // Tulis kembali file yang diperbaiki
+        fs.writeFileSync(fileToFix, resultText, "utf-8")
+        
+        await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `🔧 **AI berhasil menulis perbaikan ke \`${path.basename(fileToFix)}\`!**\nMenjalankan build ulang otomatis untuk memverifikasi...`)
+        
+        // Picu build ulang
+        executeBuildPipeline(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+
+      } catch (err: any) {
+        console.error("AI Auto-Fix error:", err)
+        await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `❌ **AI Auto-Fix Gagal:**\n${err.message}`)
+      }
     }
   }
 
@@ -467,6 +541,9 @@ async function startTelegramPoller() {
 
 startTelegramPoller()
 
+let lastBuildError: { filePath: string; fileContent: string; errorMsg: string } | null = null;
+
+
 async function executeBuildPipeline(token: string, chatId: string) {
   await sendTelegramMessage(token, chatId, "🔨 **Mulai Proses Build di VPS...**\n`1/2: Menghapus cache & compiler build lama...`")
   
@@ -494,6 +571,8 @@ async function executeBuildPipeline(token: string, chatId: string) {
   child.on("close", (code) => {
     console.log(`[Build Closed] Exit code: ${code}`)
     if (code === 0) {
+      // Clear error on success
+      lastBuildError = null
       sendTelegramMessage(token, chatId, `✅ **Build NextJS Berhasil!**\n\`2/2: Merestart service web...\``)
       exec("pm2 restart np-web", (pm2Err, pm2Out, pm2Stderr) => {
         if (pm2Err) {
@@ -503,7 +582,55 @@ async function executeBuildPipeline(token: string, chatId: string) {
         }
       })
     } else {
+      // Deteksi letak file error via regex
+      // Contoh: /home/rizki/np-automation/src/worker.ts:22:21 atau src/components/Badge.tsx
       const errorSample = outputLog.substring(outputLog.length - 2000) || "No error log detail"
+      
+      let detectedPath: string | null = null
+      // Regex mencari path file yang bermasalah di folder src/
+      const match = outputLog.match(/(?:\/home\/rizki\/np-automation\/)?(src\/[a-zA-Z0-9_\-\/]+\.[tjs]sx?)/)
+      if (match && match[1]) {
+        detectedPath = match[1].startsWith("/") ? match[1] : `/home/rizki/np-automation/${match[1]}`
+      }
+
+      if (detectedPath && fs.existsSync(detectedPath)) {
+        try {
+          const rawContent = fs.readFileSync(detectedPath, "utf-8")
+          lastBuildError = {
+            filePath: detectedPath,
+            fileContent: rawContent,
+            errorMsg: outputLog
+          }
+
+          // Kirim pesan failure dengan opsi Auto-Fix
+          fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: `❌ **Build NextJS Gagal (Exit Code ${code})**\n\nTerdeteksi error di file: \`${path.basename(detectedPath)}\`\n\`\`\`\n${errorSample}\n\`\`\``,
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    { text: "🔮 AI Auto-Fix (OmniRoute)", callback_data: "ai_autofix" }
+                  ],
+                  [
+                    { text: "🔄 Restart Web", callback_data: "restart_web" },
+                    { text: "📊 Status", callback_data: "pm2_status" },
+                    { text: "📋 Web Logs", callback_data: "web_logs" }
+                  ]
+                ]
+              }
+            })
+          }).catch(err => console.error("Failed to send fail message:", err))
+          return
+        } catch (readErr: any) {
+          console.error("Failed to read error file for caching:", readErr)
+        }
+      }
+
+      // Jika file bermasalah tidak terdeteksi, kirim pesan default
       sendTelegramMessage(token, chatId, `❌ **Build NextJS Gagal (Exit Code ${code})**\nLog error terakhir:\n\`\`\`\n${errorSample}\n\`\`\``)
     }
   })
