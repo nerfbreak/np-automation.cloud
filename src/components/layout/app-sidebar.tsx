@@ -19,6 +19,7 @@ import {
   ChevronRight,
   ClipboardList,
   Sparkles,
+  LogOut,
 } from "lucide-react";
 
 import {
@@ -237,20 +238,40 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t p-4 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:items-center">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold uppercase shrink-0">
-            {username.slice(0, 2)}
+      <SidebarFooter className="border-t p-3 group-data-[collapsible=icon]:p-2">
+        {/* User Profile Card */}
+        <div className="flex items-center gap-3 bg-zinc-950/70 border border-zinc-800 rounded-xl p-3 w-full group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:border-none">
+          {/* Avatar Area */}
+          <div className="h-9 w-9 rounded-full border border-zinc-800 bg-zinc-900 flex items-center justify-center text-sm font-bold uppercase text-white shrink-0">
+            {username.slice(0, 1)}
           </div>
-          <div className="flex flex-col group-data-[collapsible=icon]:hidden min-w-0">
-            <span className="text-sm font-semibold capitalize text-foreground leading-tight">{username}</span>
-            <span className="text-[11px] text-muted-foreground leading-normal mt-0.5">{getRoleLabel(username)}</span>
-            <button onClick={handleLogout} className="text-[11px] text-muted-foreground hover:text-foreground text-left mt-1 transition-colors">
-              Log out
-            </button>
+          
+          {/* Profile Details (hidden when sidebar collapsed) */}
+          <div className="flex flex-col flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-sm font-bold text-white leading-tight capitalize truncate max-w-[80px]">
+                {username}
+              </span>
+              <span className="text-[9px] text-zinc-400 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded font-medium">
+                {getRoleLabel(username)}
+              </span>
+            </div>
+            <span className="text-[10px] text-blue-400 font-mono tracking-tight mt-0.5">
+              Active Session
+            </span>
           </div>
+
+          {/* Logout Trigger (hidden when sidebar collapsed) */}
+          <button 
+            onClick={handleLogout} 
+            className="ml-auto text-zinc-400 hover:text-zinc-200 transition-colors p-1 shrink-0 group-data-[collapsible=icon]:hidden"
+            title="Log out"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
-        <p className="text-[10px] text-muted-foreground/40 mt-3 group-data-[collapsible=icon]:hidden text-center leading-snug">
+        
+        <p className="text-[9px] text-muted-foreground/30 mt-3 group-data-[collapsible=icon]:hidden text-center leading-snug">
           © 2026 IT Support Newspage
         </p>
       </SidebarFooter>
