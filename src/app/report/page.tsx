@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import { copyJobResultText, copyJobResultImage } from "@/lib/utils";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 5;
 
 interface RealJob {
   id: string; job_id: string;
@@ -150,41 +150,44 @@ function JobsPagination({ page, total, pageSize, onChange }: {
   }
 
   return (
-    <Pagination className="mt-4">
-      <PaginationContent>
-        <PaginationItem>
-          <PaginationPrevious
-            href="#"
-            onClick={e => { e.preventDefault(); if (page > 1) onChange(page - 1); }}
-            aria-disabled={page <= 1}
-            className={page <= 1 ? "pointer-events-none opacity-50" : ""}
-          />
-        </PaginationItem>
-        {pages.map((p, i) =>
-          p === "ellipsis" ? (
-            <PaginationItem key={`ell-${i}`}><PaginationEllipsis /></PaginationItem>
-          ) : (
-            <PaginationItem key={p}>
-              <PaginationLink
-                href="#"
-                isActive={p === page}
-                onClick={e => { e.preventDefault(); onChange(p); }}
-              >
-                {p}
-              </PaginationLink>
-            </PaginationItem>
-          )
-        )}
-        <PaginationItem>
-          <PaginationNext
-            href="#"
-            onClick={e => { e.preventDefault(); if (page < totalPages) onChange(page + 1); }}
-            aria-disabled={page >= totalPages}
-            className={page >= totalPages ? "pointer-events-none opacity-50" : ""}
-          />
-        </PaginationItem>
-      </PaginationContent>
-    </Pagination>
+    <>
+      <div className="mt-4 text-sm text-muted-foreground text-center">Page {page} of {totalPages}</div>
+      <Pagination>
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationPrevious
+              href="#"
+              onClick={e => { e.preventDefault(); if (page > 1) onChange(page - 1); }}
+              aria-disabled={page <= 1}
+              className={page <= 1 ? "pointer-events-none opacity-50" : ""}
+            />
+          </PaginationItem>
+          {pages.map((p, i) =>
+            p === "ellipsis" ? (
+              <PaginationItem key={`ell-${i}`}><PaginationEllipsis /></PaginationItem>
+            ) : (
+              <PaginationItem key={p}>
+                <PaginationLink
+                  href="#"
+                  isActive={p === page}
+                  onClick={e => { e.preventDefault(); onChange(p); }}
+                >
+                  {p}
+                </PaginationLink>
+              </PaginationItem>
+            )
+          )}
+          <PaginationItem>
+            <PaginationNext
+              href="#"
+              onClick={e => { e.preventDefault(); if (page < totalPages) onChange(page + 1); }}
+              aria-disabled={page >= totalPages}
+              className={page >= totalPages ? "pointer-events-none opacity-50" : ""}
+            />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>
+    </>
   );
 }
 
