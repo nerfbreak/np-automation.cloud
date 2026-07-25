@@ -26,7 +26,7 @@ export type JobStatus =
   | "Timed out"
 
 const statusBadgeVariants = cva(
-  "inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors",
   {
     variants: {
       status: {
@@ -92,7 +92,7 @@ export function StatusBadge({
   return (
     <div className={cn(statusBadgeVariants({ status }), className)} {...props}>
       {showIcon && (
-        <Icon className={cn("h-4 w-4", isSpinning && "animate-spin")} />
+        <Icon className={cn("h-3 w-3", isSpinning && "animate-spin")} />
       )}
       {status}
     </div>

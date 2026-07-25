@@ -1,36 +1,73 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
-import { DataTable } from "@/components/data-display/data-table";
 import { MetricCard } from "@/components/data-display/metric-card";
 import { StatusBadge } from "@/components/feedback/status-badge";
-import { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow, differenceInMinutes, differenceInSeconds } from "date-fns";
 import { Download, Copy, Image as ImageIcon, CheckCircle2, XCircle, TrendingUp, FileText, Inbox, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { copyJobResultText, copyJobResultImage } from "@/lib/utils";
 
 interface RealJob {
-  id: string;
-  job_id: string;
-  distributor_username: string;
-  distributor_name?: string;
+  id: string; job_id: string;
+  distributor_username: string; distributor_name?: string;
   status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
-  result_summary: string | null;
-  created_at: string;
-  updated_at: string;
+  result_summary: string | null; created_at: string; updated_at: string;
+}
+
+function getDuration(job: RealJob): string {
+  const start = new Date(job.created_at);
+  const end = job.status === "RUNNING" ? new Date() : new Date(job.updated_at);
+  const m = differenceInMinutes(end, start);
+  const s = differenceInSeconds(end, start) % 60;
+  return m > 0 ? `${m}m ${s}s` : s > 0 ? `${s}s` : "0s";
+}
+function JobRow({ job }: { job: RealJob }) {
+  const name = job.distributor_name || job.distributor_username;
+  const duration = job.status === "PENDING" ? null : getDuration(job);
+  const summary = job.result_summary || "â€”";
+  return (
+    <TableRow>
+      <TableCell className="py-3">
+        <div className="font-medium text-sm">{name}</div>
+        {job.distributor_name && <div className="text-xs text-muted-foreground mt-0.5">{job.distributor_username}</div>}
+      </TableCell>
+      <TableCell className="py-3"><StatusBadge status={job.status} /></TableCell>
+      <TableCell className="py-3 whitespace-nowrap text-xs text-muted-foreground">
+        {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
+      </TableCell>
+      <TableCell className="py-3 whitespace-nowrap text-xs tabular-nums text-muted-foreground">{duration ?? "â€”"}</TableCell>
+      <TableCell className="py-3 max-w-xs text-xs text-muted-foreground break-words">{summary}</TableCell>
+      <TableCell className="py-3">
+        {job.status === "COMPLETED" && (
+          <div className="flex items-center gap-0.5 justify-end">
+            <TooltipProvider delay={300}><Tooltip><TooltipTrigger>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                onClick={() => { const a = document.createElement("a"); a.href=`/screenshots/${job.job_id}.png`; a.download=`bukti_${job.job_id}.png`; a.click(); }}>
+                <Download className="h-3.5 w-3.5" /></Button>
+            </TooltipTrigger><TooltipContent>Unduh Screenshot</TooltipContent></Tooltip></TooltipProvider>
+            <TooltipProvider delay={300}><Tooltip><TooltipTrigger>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                onClick={async () => { const tid=toast.loading("Menyalin..."); const r=await copyJobResultImage(job.job_id); r.success?toast.success("Gambar disalin!",{id:tid}):toast.error("Gagal",{id:tid}); }}>
+                <ImageIcon className="h-3.5 w-3.5" /></Button>
+            </TooltipTrigger><TooltipContent>Salin Gambar</TooltipContent></Tooltip></TooltipProvider>
+            <TooltipProvider delay={300}><Tooltip><TooltipTrigger>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                onClick={async () => { const r=await copyJobResultText(name,job.distributor_username,job.result_summary||"",duration||"0s"); r.success?toast.success("Teks disalin!"):toast.error("Gagal"); }}>
+                <Copy className="h-3.5 w-3.5" /></Button>
+            </TooltipTrigger><TooltipContent>Salin Teks</TooltipContent></Tooltip></TooltipProvider>
+          </div>)}
+      </TableCell>
+    </TableRow>
+  );
 }
 
 export default function ReportPage() {
@@ -38,345 +75,30 @@ export default function ReportPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>("all");
   const [search, setSearch] = useState("");
-
   useEffect(() => {
     let isMounted = true;
-    const fetchJobs = async () => {
+    const fetch_ = async () => {
       try {
-        const res = await fetch("/api/jobs");
-        if (!res.ok) return;
+        const res = await fetch("/api/jobs"); if (!res.ok) return;
         const data = await res.json();
-        if (isMounted && data.jobs) {
-          const finishedJobs = data.jobs.filter((j: RealJob) => j.status === "COMPLETED" || j.status === "FAILED");
-          setJobs(finishedJobs);
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-    fetchJobs();
-    const interval = setInterval(fetchJobs, 5000);
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
+        if (isMounted && data.jobs) setJobs(data.jobs.filter((j: RealJob) => j.status === "COMPLETED" || j.status === "FAILED"));
+      } catch (e) { console.error(e); } finally { if (isMounted) setIsLoading(false); }
+    }; fetch_(); const iv = setInterval(fetch_, 5000);
+    return () => { isMounted = false; clearInterval(iv); };
   }, []);
-
-  const columns: ColumnDef<RealJob>[] = [
-    {
-      accessorKey: "distributor_username",
-      header: "Distributor",
-      cell: ({ row }) => {
-        const name = row.original.distributor_name || row.getValue("distributor_username") as string;
-        return (
-          <TooltipProvider delay={300}>
-            <Tooltip>
-              <TooltipTrigger>
-                <div className="font-medium text-sm truncate max-w-[140px]">
-                  {name}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{name}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        );
-      }
-    },
-    {
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }) => (
-        <StatusBadge status={row.getValue("status")} />
-      ),
-    },
-    {
-      id: "time",
-      header: "Time",
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {formatDistanceToNow(new Date(row.original.created_at), { addSuffix: true })}
-        </span>
-      ),
-    },
-    {
-      id: "duration",
-      header: "Duration",
-      cell: ({ row }) => {
-        const status = row.original.status;
-        if (status === "PENDING") return <span className="text-muted-foreground text-xs">-</span>;
-        
-        const start = new Date(row.original.created_at);
-        const end = status === "RUNNING" ? new Date() : new Date(row.original.updated_at);
-        
-        const diffMins = differenceInMinutes(end, start);
-        const diffSecs = differenceInSeconds(end, start) % 60;
-        
-        return (
-          <span className="text-xs text-muted-foreground">
-            {diffMins > 0 ? `${diffMins}m ` : ''}{diffSecs}s
-          </span>
-        );
-      },
-    },
-    {
-      accessorKey: "result_summary",
-      header: "Summary",
-      cell: ({ row }) => {
-        const summary = row.getValue("result_summary") as string | null;
-        return (
-          <TooltipProvider delay={300}>
-            <Tooltip>
-              <TooltipTrigger>
-                <div className="text-sm max-w-[140px] truncate">
-                  {summary || "-"}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="start" className="max-w-[400px]">
-                <p>{summary || "-"}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        );
-      }
-    },
-    {
-      id: "actions",
-      header: "",
-      cell: ({ row }) => {
-        const status = row.original.status;
-        const jobId = row.original.job_id;
-        
-        if (status === "COMPLETED") {
-          return (
-            <TooltipProvider delay={300}>
-              <div className="flex items-center gap-1 justify-end">
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        nativeButton={false}
-                        render={
-                          <a
-                            href={`/screenshots/${jobId}.png`}
-                            download={`bukti_stkadj_${jobId}.png`}
-                            target="_blank"
-                            rel="noreferrer"
-                          />
-                        }
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        <span className="sr-only">Unduh Bukti</span>
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>Unduh Bukti Screenshot</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
-                        onClick={async () => {
-                          const toastId = toast.loading("Menyalin gambar...");
-                          const result = await copyJobResultImage(jobId);
-                          
-                          if (result.success) {
-                            toast.success("Gambar disalin!", { 
-                              id: toastId,
-                              description: "Siap di-paste ke WhatsApp." 
-                            });
-                          } else {
-                            toast.error("Gagal", { 
-                              id: toastId,
-                              description: "Gagal mengambil gambar." 
-                            });
-                          }
-                        }}
-                      >
-                        <ImageIcon className="h-3.5 w-3.5" />
-                        <span className="sr-only">Salin Gambar</span>
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>Salin Gambar</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
-                        onClick={async () => {
-                          const summary = row.getValue("result_summary") as string || "";
-                          const distributorUsername = row.original.distributor_username;
-                          const distributorName = row.original.distributor_name || "";
-                          
-                          // Calculate duration
-                          const start = new Date(row.original.created_at);
-                          const end = row.original.status === "RUNNING" ? new Date() : new Date(row.original.updated_at);
-                          const diffMins = differenceInMinutes(end, start);
-                          const diffSecs = differenceInSeconds(end, start) % 60;
-                          const durationStr = diffMins > 0 ? `${diffMins}m ${diffSecs}s` : `${diffSecs}s`;
-                          
-                          const result = await copyJobResultText(distributorName, distributorUsername, summary, durationStr);
-                          
-                          if (result.success) {
-                            toast.success("Teks disalin!", { 
-                              description: "Siap di-paste ke WhatsApp." 
-                            });
-                          } else {
-                            toast.error("Gagal", { 
-                              description: "Gagal menyalin teks." 
-                            });
-                          }
-                        }}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        <span className="sr-only">Salin Teks</span>
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>Salin Teks</TooltipContent>
-                </Tooltip>
-              </div>
-            </TooltipProvider>
-          );
-        }
-        return null;
-      }
-    }
-  ];
-
-  const completedCount = jobs.filter(j => j.status === "COMPLETED").length;
-  const failedCount = jobs.filter(j => j.status === "FAILED").length;
-  const successRate = jobs.length > 0 ? Math.round((completedCount / jobs.length) * 100) : 0;
-
-  const filteredJobs = (activeTab === "all"
-    ? jobs
-    : activeTab === "completed"
-      ? jobs.filter(j => j.status === "COMPLETED")
-      : jobs.filter(j => j.status === "FAILED")
-  ).filter(j =>
-    (j.distributor_name || j.distributor_username).toLowerCase().includes(search.toLowerCase())
-  );
-
+  const completedCount = jobs.filter((j) => j.status === "COMPLETED").length;
+  const failedCount = jobs.filter((j) => j.status === "FAILED").length;
+  const successRate = jobs.length > 0 ? Math.round((completedCount/jobs.length)*100) : 0;
+  const filteredJobs = (activeTab==="all"?jobs:activeTab==="completed"?jobs.filter(j=>j.status==="COMPLETED"):jobs.filter(j=>j.status==="FAILED")).filter(j=>(j.distributor_name||j.distributor_username).toLowerCase().includes(search.toLowerCase()));
   return (
-    <AppShell breadcrumbs={[{ label: "Report" }]}>
-      <div className="flex flex-col gap-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Jobs Report</h1>
-          <p className="text-muted-foreground mt-2 text-sm">
-            History of all completed and failed operations.
-          </p>
-        </div>
-
-        {/* Summary Cards */}
-        {isLoading ? (
-          <div className="grid gap-4 md:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent className="pt-4">
-                  <Skeleton className="h-4 w-24 mb-2" />
-                  <Skeleton className="h-8 w-12" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-4">
-            <MetricCard
-              title="Total Jobs"
-              value={jobs.length}
-              icon={<FileText className="h-4 w-4" />}
-              className="bg-card border-border/50 shadow-sm"
-            />
-            <MetricCard
-              title="Completed"
-              value={completedCount}
-              icon={<CheckCircle2 className="h-4 w-4" />}
-              className="bg-card border-border/50 shadow-sm"
-            />
-            <MetricCard
-              title="Failed"
-              value={failedCount}
-              icon={<XCircle className="h-4 w-4" />}
-              className="bg-card border-border/50 shadow-sm"
-            />
-            <MetricCard
-              title="Success Rate"
-              value={`${successRate}%`}
-              icon={<TrendingUp className="h-4 w-4" />}
-              className="bg-card border-border/50 shadow-sm"
-            />
-          </div>
-        )}
-        {/* Tabs + Table */}
-        {isLoading ? (
-          <Card>
-            <CardContent className="py-8">
-              <div className="space-y-3">
-                <Skeleton className="h-8 w-full" />
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-              </div>
-            </CardContent>
-          </Card>
-        ) : jobs.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="rounded-full bg-muted p-4 mb-4">
-                <Inbox className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-lg font-semibold mb-1">No completed jobs yet</h3>
-              <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-                Completed and failed jobs will appear here after processing.
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Tabs defaultValue="all" onValueChange={(v) => { setActiveTab(v); setSearch(""); }}>
-            <div className="flex items-center justify-between mb-3">
-              <TabsList>
-                <TabsTrigger value="all">All ({jobs.length})</TabsTrigger>
-                <TabsTrigger value="completed">Completed ({completedCount})</TabsTrigger>
-                <TabsTrigger value="failed">Failed ({failedCount})</TabsTrigger>
-              </TabsList>
-              <div className="relative w-[220px]">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search distributor..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-8 h-9"
-                />
-              </div>
-            </div>
-            <TabsContent value="all" className="mt-0">
-              <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
-            </TabsContent>
-            <TabsContent value="completed" className="mt-0">
-              <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
-            </TabsContent>
-            <TabsContent value="failed" className="mt-0">
-              <DataTable columns={columns} data={filteredJobs} defaultPageSize={10} />
-            </TabsContent>
-          </Tabs>
-        )}
-      </div>
-    </AppShell>
-  );
+    <AppShell breadcrumbs={[{ label: "Report" }]}><div className="flex flex-col gap-6">
+      <div><h1 className="text-3xl font-bold tracking-tight">Jobs Report</h1><p className="text-muted-foreground mt-2 text-sm">History of all completed and failed operations.</p></div>
+      {isLoading ? (<div className="grid gap-4 md:grid-cols-4">{Array.from({length:4}).map((_,i)=>(<Card key={i}><CardContent className="pt-4"><Skeleton className="h-4 w-24 mb-2"/><Skeleton className="h-8 w-12"/></CardContent></Card>))}</div>
+      ) : (<div className="grid gap-4 md:grid-cols-4"><MetricCard title="Total Jobs" value={jobs.length} icon={<FileText className="h-4 w-4"/>} className="bg-card border-border/50 shadow-sm"/><MetricCard title="Completed" value={completedCount} icon={<CheckCircle2 className="h-4 w-4"/>} className="bg-card border-border/50 shadow-sm"/><MetricCard title="Failed" value={failedCount} icon={<XCircle className="h-4 w-4"/>} className="bg-card border-border/50 shadow-sm"/><MetricCard title="Success Rate" value={`${successRate}%`} icon={<TrendingUp className="h-4 w-4"/>} className="bg-card border-border/50 shadow-sm"/></div>)}
+      {isLoading ? (<Card><CardContent className="py-8"><div className="space-y-3"><Skeleton className="h-8 w-full"/><Skeleton className="h-12 w-full"/><Skeleton className="h-12 w-full"/></div></CardContent></Card>
+      ) : jobs.length===0 ? (<Card><CardContent className="flex flex-col items-center justify-center py-16 text-center"><div className="rounded-full bg-muted p-4 mb-4"><Inbox className="h-8 w-8 text-muted-foreground"/></div><h3 className="text-lg font-semibold mb-1">No completed jobs yet</h3><p className="text-sm text-muted-foreground max-w-sm">Completed and failed jobs will appear here after processing.</p></CardContent></Card>
+      ) : (
+        <Tabs defaultValue="all" onValueChange={(v)=>{setActiveTab(v);setSearch("");}}><div className="flex items-center justify-between mb-3"><TabsList><TabsTrigger value="all">All ({jobs.length})</TabsTrigger><TabsTrigger value="completed">Completed ({completedCount})</TabsTrigger><TabsTrigger value="failed">Failed ({failedCount})</TabsTrigger></TabsList><div className="relative w-[220px]"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"/><Input placeholder="Search distributor..." value={search} onChange={(e)=>setSearch(e.target.value)} className="pl-8 h-9"/></div></div>
+          {(["all","completed","failed"] as const).map(tab=>(<TabsContent key={tab} value={tab} className="mt-0"><div className="rounded-md border"><Table><TableHeader><TableRow><TableHead className="w-[220px]">Distributor</TableHead><TableHead className="w-[120px]">Status</TableHead><TableHead className="w-[140px]">Time</TableHead><TableHead className="w-[90px]">Duration</TableHead><TableHead>Summary</TableHead><TableHead className="w-[100px]"></TableHead></TableRow></TableHeader><TableBody>{filteredJobs.length===0?<TableRow><TableCell colSpan={6} className="h-32 text-center text-sm text-muted-foreground">Tidak ada data.</TableCell></TableRow>:filteredJobs.map(job=><JobRow key={job.id} job={job}/>)}</TableBody></Table></div></TabsContent>))}
+        </Tabs>)}</div></AppShell>)
 }
