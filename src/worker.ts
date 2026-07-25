@@ -166,10 +166,13 @@ const worker = new Worker(
 
             formData.append('photo', blob, 'screenshot.png')
             formData.append('reply_markup', JSON.stringify({
-              inline_keyboard: [[
-                { text: "🔄 Restart Web (Fix 502)", callback_data: "restart_web" },
-                { text: "📊 PM2 Status", callback_data: "pm2_status" }
-              ]]
+              inline_keyboard: [
+                [
+                  { text: "🔄 Restart Web", callback_data: "restart_web" },
+                  { text: "📊 Status", callback_data: "pm2_status" },
+                  { text: "📋 Web Logs", callback_data: "web_logs" }
+                ]
+              ]
             }))
 
             const tgResp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
@@ -193,10 +196,13 @@ const worker = new Worker(
                 chat_id: TELEGRAM_CHAT_ID,
                 text: caption,
                 reply_markup: {
-                  inline_keyboard: [[
-                    { text: "🔄 Restart Web (Fix 502)", callback_data: "restart_web" },
-                    { text: "📊 PM2 Status", callback_data: "pm2_status" }
-                  ]]
+                  inline_keyboard: [
+                    [
+                      { text: "🔄 Restart Web", callback_data: "restart_web" },
+                      { text: "📊 Status", callback_data: "pm2_status" },
+                      { text: "📋 Web Logs", callback_data: "web_logs" }
+                    ]
+                  ]
                 }
               }),
             })
@@ -254,10 +260,13 @@ const worker = new Worker(
               chat_id: TELEGRAM_CHAT_ID,
               text: caption,
               reply_markup: {
-                inline_keyboard: [[
-                  { text: "🔄 Restart Web (Fix 502)", callback_data: "restart_web" },
-                  { text: "📊 PM2 Status", callback_data: "pm2_status" }
-                ]]
+                inline_keyboard: [
+                  [
+                    { text: "🔄 Restart Web", callback_data: "restart_web" },
+                    { text: "📊 Status", callback_data: "pm2_status" },
+                    { text: "📋 Web Logs", callback_data: "web_logs" }
+                  ]
+                ]
               }
             }),
           })
@@ -338,6 +347,13 @@ async function handleTelegramUpdate(update: any) {
         const cleanOutput = output.substring(0, 3000)
         sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `📊 **PM2 Status:**\n\`\`\`\n${cleanOutput}\n\`\`\``)
       })
+    } else if (data === "web_logs") {
+      console.log("[TelegramBot] Web Logs triggered via button")
+      exec("tail -n 25 /home/rizki/logs/web-error.log", (err, stdout, stderr) => {
+        const output = stdout || stderr || "No logs found or error"
+        const cleanOutput = output.substring(0, 3000) || "Empty log file"
+        sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `📋 **Web Error Logs (Last 25 lines):**\n\`\`\`\n${cleanOutput}\n\`\`\``)
+      })
     }
   }
 
@@ -359,8 +375,14 @@ async function handleTelegramUpdate(update: any) {
         const cleanOutput = output.substring(0, 3000)
         sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `📊 **PM2 Status:**\n\`\`\`\n${cleanOutput}\n\`\`\``)
       })
+    } else if (text.startsWith("/logs") || text === "logs" || text.includes("error") || text.includes("log")) {
+      exec("tail -n 25 /home/rizki/logs/web-error.log", (err, stdout, stderr) => {
+        const output = stdout || stderr || "No logs found or error"
+        const cleanOutput = output.substring(0, 3000) || "Empty log file"
+        sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `📋 **Web Error Logs (Last 25 lines):**\n\`\`\`\n${cleanOutput}\n\`\`\``)
+      })
     } else if (text.startsWith("/help") || text === "help") {
-      const helpMsg = `🤖 **NP Automation Admin Bot**\nKirim perintah berikut untuk mengoperasikan VPS:\n- /restart atau tulis "restart": Restart web server\n- /status atau tulis "pm2": Cek status PM2\n- /help: Tampilkan menu bantuan ini`
+      const helpMsg = `🤖 **NP Automation Admin Bot**\nKirim perintah berikut untuk mengoperasikan VPS:\n- /restart atau tulis "restart": Restart web server\n- /status atau tulis "pm2": Cek status PM2\n- /logs atau tulis "logs": Tampilkan log error terkini web server\n- /help: Tampilkan menu bantuan ini`
       sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, helpMsg)
     }
   }
