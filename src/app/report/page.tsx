@@ -41,7 +41,7 @@ function SummaryCell({ summary }: { summary: string }) {
   const truncated = summary.length > SUMMARY_LIMIT;
   const preview = truncated ? summary.slice(0, SUMMARY_LIMIT) + "…" : summary;
   return (
-    <TableCell className="py-3 text-xs text-muted-foreground">
+    <TableCell className="py-3 text-xs text-muted-foreground whitespace-normal break-words max-w-[300px]">
       <span>{preview}</span>
       {truncated && (
         <>
@@ -246,7 +246,7 @@ export default function ReportPage() {
                         <TableHead className="w-[120px]">Status</TableHead>
                         <TableHead className="w-[140px]">Time</TableHead>
                         <TableHead className="w-[90px]">Duration</TableHead>
-                        <TableHead>Summary</TableHead>
+                        <TableHead className="max-w-[300px]">Summary</TableHead>
                         <TableHead className="w-[100px]"></TableHead>
                       </TableRow>
                     </TableHeader>
