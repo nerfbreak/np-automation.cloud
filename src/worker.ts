@@ -396,6 +396,9 @@ async function startTelegramPoller() {
   } catch (initErr) {
     console.error("[TelegramBot] Failed to skip old updates:", initErr)
   }
+
+  // Send startup message to confirm bot is running and variables are correct
+  await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, "🤖 **NP Automation Admin Bot Aktif!**\nKirim /help atau ketik `pm2` untuk melihat daftar status.")
   
   while (true) {
     try {
