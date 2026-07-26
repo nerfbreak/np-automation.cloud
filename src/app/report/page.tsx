@@ -40,7 +40,7 @@ const SUMMARY_LIMIT = 80;
 function SummaryCell({ summary }: { summary: string }) {
   const [open, setOpen] = useState(false);
   const truncated = summary.length > SUMMARY_LIMIT;
-  const preview = truncated ? summary.slice(0, SUMMARY_LIMIT) + "…" : summary;
+  const preview = truncated ? summary.slice(0, SUMMARY_LIMIT) + "..." : summary;
   return (
     <TableCell className="py-3 text-xs text-muted-foreground whitespace-normal break-words max-w-[300px]">
       <span>{preview}</span>
