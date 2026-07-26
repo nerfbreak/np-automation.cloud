@@ -11,4 +11,4 @@ description: Delivers verified session handoff at completion
 2. Ensure no secrets are exposed.
 3. Update `.agents/SESSION_LOG.md` (append only).
 4. Update relevant memory files (ROADMAP, DECISIONS).
-5. Rewrite `.ai-memory/HANDOFF.md` using the verified structure (Session Metadata, Active Context, Exact Next Action, Validation, Tooling Status).
+5. Rewrite `.agents/CURRENT_HANDOFF.md` using the verified structure (Session Metadata, Active Context, Exact Next Action, Validation, Tooling Status).

@@ -149,6 +149,37 @@ Each session entry should include:
 - Hybrid memory structure: `.ai-memory/` for bootstrap, `.agents/` for context.
 
 
+### SESSION-2026-07-26-003: Setup Session Completion
+
+**Agent**: Cline (AI coding agent)
+**Duration**: ~10 mins
+**Date**: 2026-07-26
+**Objective**: Establish the canonical session log path per mandate.
+
+**Work Completed**:
+1. ✅ Consolidated duplicates into canonical `.agents/SESSION_LOG.md` and `.agents/CURRENT_HANDOFF.md`.
+2. ✅ Updated `AGENTS.md`, `.ai-memory/BOOTSTRAP.md`, and `.cline/skills/session-handoff/SKILL.md` to reference `.agents/` equivalents.
+3. ✅ Removed duplicate `.ai-memory/` files.
+
+**Files Modified**:
+- `.agents/SESSION_LOG.md` (appended)
+- `.agents/CURRENT_HANDOFF.md` (restored as canonical)
+- `AGENTS.md`
+- `.ai-memory/BOOTSTRAP.md`
+- `.cline/skills/session-handoff/SKILL.md`
+
+**Verification**:
+- Git status verified.
+- All referenced paths validated.
+
+**Next Session**:
+1. Review Git diff.
+2. Commit changes.
+
+**Related Commits**: None (uncommitted)
+
+---
+
 ## Archive
 
 Move sessions older than 90 days to `.agents/archive/YYYY-MM/SESSION_LOG_archive.md`

@@ -24,7 +24,7 @@ Each ADR must include:
 
 ## ADR-0001: Repository-Based Shared Memory for AI Agents
 
-**Date**: 2026-07-26  
+**Date**: 2026-07-26
 **Status**: `accepted`
 
 ### Context
@@ -97,7 +97,7 @@ Establish `.agents/` directory as the authoritative shared memory system contain
 
 ## ADR-0002: Enhance Existing .agents/ System (Not Create .ai-memory/)
 
-**Date**: 2026-07-26  
+**Date**: 2026-07-26
 **Status**: `accepted`
 
 ### Context
@@ -192,10 +192,57 @@ Mandate explicitly states: "Do not create duplicate memory systems if an equival
 
 ## Future ADRs
 
+## ADR-0004: Final Memory Governance Architecture
+
+**Date**: 2026-07-26
+**Status**: `accepted`
+
+### Context
+ADR-0003 implemented a hybrid memory architecture that created `.ai-memory/HANDOFF.md` and `.ai-memory/SESSION_LOG.md` to satisfy a mandate, while keeping `.agents/` for long-term project knowledge. This resulted in duplicate handoff and session log files, which caused path conflict errors and confusion regarding canonical states.
+
+### Decision
+Establish a strict canonical separation to eliminate duplicate files:
+1. **Bootstrap**: `.ai-memory/BOOTSTRAP.md` remains the definitive session entrypoint to satisfy the mandate's hardcoded path requirement.
+2. **Canonical Memory**: `.agents/` remains the authoritative repository for shared memory.
+3. **Canonical Handoff**: `.agents/CURRENT_HANDOFF.md` is the only active handoff file.
+4. **Canonical Session Log**: `.agents/SESSION_LOG.md` is the only session log file.
+
+Duplicate files (`.ai-memory/HANDOFF.md` and `.ai-memory/SESSION_LOG.md`) have been deleted.
+
+### Alternatives Considered
+1. **Maintain duplicate files** — Rejected: increases maintenance overhead and leads to inconsistent context states between AI agents.
+2. **Move all files to `.ai-memory/`** — Rejected: violates ADR-0002 which solidified `.agents/` as the established root.
+
+### Consequences
+**Positive:**
+- Eliminates ambiguity regarding which file holds the latest continuation point or session history.
+- Satisfies the mandate's entrypoint requirement via `.ai-memory/BOOTSTRAP.md` while utilizing the established, clean `.agents/` storage.
+
+**Negative:**
+- Requires agents to read `.ai-memory/BOOTSTRAP.md` initially and pivot to `.agents/` for actual state and logs.
+
+### Security Impact
+None.
+
+### Migration Impact
+The duplicates `.ai-memory/HANDOFF.md` and `.ai-memory/SESSION_LOG.md` were merged into their `.agents/` equivalents and deleted. Agent instructions and Cline skills have been updated to target `.agents/`.
+
+### Rollback
+Restore deleted duplicates from Git history and revert agent instructions.
+
+### Related Files
+- `.ai-memory/BOOTSTRAP.md`
+- `.agents/CURRENT_HANDOFF.md`
+- `.agents/SESSION_LOG.md`
+- `AGENTS.md`
+- `.cline/skills/session-handoff/SKILL.md`
+
+---
+
 ## ADR-0003: Hybrid AI Memory Architecture (Bootstrap vs Context)
 
-**Date**: 2026-07-26  
-**Status**: `accepted`
+**Date**: 2026-07-26
+**Status**: `superseded` (by ADR-0004)
 
 ### Context
 A new mandate required the creation of `.ai-memory/BOOTSTRAP.md`, `.ai-memory/HANDOFF.md`, and `.ai-memory/AGENT_INTEGRATIONS.md`. However, ADR-0002 previously decided to enhance the existing `.agents/` directory for shared memory instead of creating a duplicate `.ai-memory/` directory.

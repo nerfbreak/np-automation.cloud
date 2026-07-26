@@ -10,7 +10,7 @@ Before responding to, planning, or executing any repository task:
 
 1. Read and execute `.ai-memory/BOOTSTRAP.md`.
 2. Load shared memory in the required order.
-3. Read and verify `.ai-memory/HANDOFF.md` (or `.agents/CURRENT_HANDOFF.md`).
+3. Read and verify `.agents/CURRENT_HANDOFF.md`.
 4. Read active Spec Kit artifacts.
 5. Verify repository state with Git.
 6. Verify Headroom.

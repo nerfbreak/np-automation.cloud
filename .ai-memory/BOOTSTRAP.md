@@ -30,7 +30,7 @@ Read in this exact order:
 If any mandatory file is missing, mark memory as incomplete, continue safe inspection, and reconstruct state from evidence. Do not invent history.
 
 ## 4. Read Latest Handoff
-Read `.ai-memory/HANDOFF.md` (or `.agents/CURRENT_HANDOFF.md` if the former is missing).
+Read `.agents/CURRENT_HANDOFF.md`.
 
 ## 5. Discover Active Spec Kit Artifacts
 Read active artifacts in `.specify/` or `specs/`.
@@ -105,4 +105,4 @@ Proceed with the requested task. Do not ask for a manual resume prompt.
 - **Crash Recovery**: If shutdown was abnormal, reconstruct state from Git diff, active tasks, and source. Do not invent a successful shutdown. Repair handoff and log in `SESSION_LOG.md`.
 
 ## Automatic Handoff Delivery
-At the end of every meaningful session, rewrite `.ai-memory/HANDOFF.md` using the verified template, append `.agents/SESSION_LOG.md`, update memory/specs, and leave an exact next action.
+At the end of every meaningful session, rewrite `.agents/CURRENT_HANDOFF.md` using the verified template, append `.agents/SESSION_LOG.md`, update memory/specs, and leave an exact next action.
