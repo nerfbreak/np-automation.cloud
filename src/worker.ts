@@ -14,6 +14,9 @@ const connection = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', 
   maxRetriesPerRequest: null,
 })
 
+// 9Router AI Gateway API Key
+const NINEROUTER_API_KEY = process.env.NINEROUTER_API_KEY || ''
+
 console.log("Starting BullMQ Worker for inventory adjustments...")
 console.log("Concurrency set to 1. Waiting for jobs...")
 
@@ -377,7 +380,7 @@ async function handleTelegramUpdate(update: any) {
         return
       }
 
-      await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `🔮 **Menghubungi AI (OmniRoute)...**\nMenganalisis error di file \`${path.basename(lastBuildError.filePath)}\`...`)
+      await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `🔮 **Menghubungi AI (9Router)...**\nMenganalisis error di file \`${path.basename(lastBuildError.filePath)}\`...`)
       
       const fileToFix = lastBuildError.filePath
       const oldCode = lastBuildError.fileContent
@@ -400,19 +403,23 @@ async function handleTelegramUpdate(update: any) {
       }
 
       try {
-        const aiResp = await fetch("http://localhost:20128/v1/chat/completions", {
+        const aiResp = await fetch("https://router.np-automation.cloud/v1/chat/completions", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          headers: { 
+            "Content-Type": "application/json", 
+            "Accept": "application/json",
+            "Authorization": `Bearer ${NINEROUTER_API_KEY}`
+          },
           body: JSON.stringify(payload),
           signal: AbortSignal.timeout(120000)
         })
 
         if (!aiResp.ok) {
           const errBody = await aiResp.text().catch(() => "")
-          throw new Error(`OmniRoute returned status ${aiResp.status}: ${errBody.substring(0, 200)}`)
+          throw new Error(`9Router returned status ${aiResp.status}: ${errBody.substring(0, 200)}`)
         }
 
-        // OmniRoute kadang return SSE stream meski stream:false — handle keduanya
+        // 9Router kadang return SSE stream meski stream:false — handle keduanya
         const rawText = await aiResp.text()
         let dataJson: any
         if (rawText.trimStart().startsWith("data:")) {
@@ -545,7 +552,7 @@ async function handleTelegramUpdate(update: any) {
         return
       }
 
-      await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `🔮 **AI (OmniRoute) sedang merancang fitur...**\nFile: \`${relativePath}\`\nInstruksi: "${instructions}"`)
+      await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `🔮 **AI (9Router) sedang merancang fitur...**\nFile: \`${relativePath}\`\nInstruksi: "${instructions}"`)
 
       try {
         const oldCode = fs.readFileSync(fullPath, "utf-8")
@@ -564,15 +571,18 @@ async function handleTelegramUpdate(update: any) {
           temperature: 0.1
         }
 
-        const aiResp = await fetch("http://localhost:20128/v1/chat/completions", {
+        const aiResp = await fetch("https://router.np-automation.cloud/v1/chat/completions", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${NINEROUTER_API_KEY}`
+          },
           body: JSON.stringify(payload),
           signal: AbortSignal.timeout(180000)
         })
 
         if (!aiResp.ok) {
-          throw new Error(`OmniRoute returned status ${aiResp.status}`)
+          throw new Error(`9Router returned status ${aiResp.status}`)
         }
 
         const dataJson: any = await aiResp.json()
