@@ -606,8 +606,32 @@ async function handleTelegramUpdate(update: any) {
           }
         }
 
+        // Safety: backup original file before overwrite
+        const backupPath = fullPath + ".bak"
+        fs.copyFileSync(fullPath, backupPath)
+
+        // Safety: validate JSON files remain valid JSON
+        if (relativePath.endsWith(".json")) {
+          try {
+            JSON.parse(resultText)
+          } catch {
+            fs.unlinkSync(backupPath)
+            throw new Error("AI returned invalid JSON — file NOT modified. Use /code with code-modification instructions, not questions.")
+          }
+        }
+
+        // Safety: detect if AI returned explanation text instead of code
+        const explanationPattern = /^(Daftar|Berikut|Here is|Here are|This file|The following|Penjelasan|Explanation|Below|Let me|Sure|I'll|This is a)/i
+        if (explanationPattern.test(resultText.trim()) && !relativePath.endsWith(".md") && !relativePath.endsWith(".txt")) {
+          fs.unlinkSync(backupPath)
+          throw new Error("AI returned an explanation instead of code — file NOT modified. Rephrase as a code modification instruction.")
+        }
+
+
         // Simpan perubahan ke file
         fs.writeFileSync(fullPath, resultText, "utf-8")
+        try { fs.unlinkSync(backupPath) } catch {} // cleanup backup on success
+
 
         await sendTelegramMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, `✅ **Fitur berhasil di-inject ke \`${relativePath}\`!**\nMemulai proses build otomatis...`)
         
