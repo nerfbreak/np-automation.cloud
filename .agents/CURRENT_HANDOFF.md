@@ -1,4 +1,4 @@
-# Current Handoff
+﻿# Current Handoff
 
 > Latest continuation point only.
 > Verify against Git, Spec Kit, source code, and tests before continuing.
@@ -7,77 +7,44 @@
 - **Updated**: 2026-07-26
 - **Previous agent**: Cline
 - **Branch**: master
-- **Last known commit**: a2f4ef2
+- **Last known commit**: 68c39d0
 - **Working tree**: dirty
 
 ## Current Objective
-Implement automatic AI session bootstrap and tooling validation (Headroom, RTK, verified handoff).
+Refresh stale handoff, update canonical session log, and investigate missing Spec Kit / Headroom status post-commit `68c39d0`.
 
 ## Active Spec Kit Context
 - **Feature**: automatic-session-bootstrap-headroom-and-verified-handoff
 - **Specification**: `.specify/specs/automatic-session-bootstrap-headroom-and-verified-handoff/SPECIFICATION.md`
 - **Plan**: `.specify/specs/automatic-session-bootstrap-headroom-and-verified-handoff/PLAN.md`
 - **Tasks**: `.specify/specs/automatic-session-bootstrap-headroom-and-verified-handoff/TASKS.md`
-- **Current phase**: Validation and Wrap-up
-- **Current task**: Updating memory files and final handoff
+- **Current phase**: Maintenance / Investigation
+- **Current task**: Update handoff, update session log, report findings on Spec Kit and Headroom.
 
 ## Completed
-- [x] Create Spec Kit feature artifacts (Specs, Clarification, Plan, Tasks, Analysis)
-- [x] Create `.ai-memory/BOOTSTRAP.md`
-- [x] Deleted `.ai-memory/HANDOFF.md` (duplicate cleanup)
-- [x] Consolidate duplicate handoff and mark path validation complete
-- [x] Modify `AGENTS.md` (inserted mandatory bootstrap gate)
-- [x] Create `.cline/rules/` configs
-- [x] Create `.cline/skills/` integrations
-- [x] Create `.ai-memory/AGENT_INTEGRATIONS.md`
-- [x] Append ADR-0003
+- [x] Validated commit `68c39d0`.
+- [x] Investigated "SPEC KIT: missing" cause.
+- [x] Investigated "HEADROOM: unavailable" cause.
+- [x] Refreshed handoff state.
+- [x] Updated session log with new investigation findings.
 
 ## In Progress
-- [x] Run path and link validation
-- [x] Consolidate duplicate files and mark path validation complete
-- [x] Complete final cleanup and present report
+- None
 
 ## Exact Next Action
-1. Review Git diff.
-2. Authorize commit if valid.
-
+1. Wait for user instructions based on investigation report.
 
 ## Blockers
 - None.
 
-## Files Under Change
-- `.ai-memory/BOOTSTRAP.md`: New canonical bootstrap protocol
-- `.agents/CURRENT_HANDOFF.md`: Restored as canonical handoff template (deleted duplicate `.ai-memory/HANDOFF.md`)
-- `AGENTS.md`: Added mandatory bootstrap gate
-- `.cline/*`: Project configuration and skills
-
-## Decisions
-- **Decision**: Put BOOTSTRAP in `.ai-memory/` but load memory from `.agents/`.
-- **Reason**: Comply with mandate paths while respecting ADR-0002.
-- **ADR**: ADR-0003
-
-## Validation
-### Passed
-- Path and link validation
-  - Result: All files reference canonical `.agents/` paths correctly.
-  - Evidence: Verified via static inspection.
-- `npm run build`
-  - Reason: Only docs and configs modified, no code changes.
-  - Required before completion: no
-
-## Risks and Warnings
-- **Migration concern**: Agents must now check `.ai-memory/BOOTSTRAP.md` before making changes.
-
 ## Tooling Status
-- **Headroom**: degraded (installed v0.30.0, proxy not running)
-- **RTK**: degraded (installed v0.43.0, not wired to commands)
-- **Caveman**: manual-full
+- **Headroom**: unavailable (v0.32.1 installed, but proxy not detected / configured in environment)
+- **RTK**: active
+- **Caveman**: full
 
 ## Recommended Resume Sequence
 1. Read `AGENTS.md`.
 2. Execute `.ai-memory/BOOTSTRAP.md`.
 3. Load shared memory.
 4. Verify this handoff.
-5. Read active Spec Kit artifacts.
-6. Inspect files under change.
-7. Continue the current task.
+5. Proceed with user directives.
