@@ -50,3 +50,6 @@ add-distributor.js
 insert-rules.ts
 *.xlsx
 scripts/create-users.js
+
+# Playwright MCP runtime artifacts
+.playwright-mcp/
