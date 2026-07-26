@@ -7,38 +7,34 @@
 - **Updated**: 2026-07-26
 - **Previous agent**: Cline
 - **Branch**: master
-- **Last known commit**: 68c39d0
+- **Last known commit**: 6c6f251
 - **Working tree**: dirty
 
 ## Current Objective
-Refresh stale handoff, update canonical session log, and investigate missing Spec Kit / Headroom status post-commit `68c39d0`.
+Create a project-local Cline skill named `bullmq-worker` to enforce BullMQ worker constraints, queue safety, and Next.js separation.
 
 ## Active Spec Kit Context
-- **Feature**: automatic-session-bootstrap-headroom-and-verified-handoff
-- **Specification**: `.specify/specs/automatic-session-bootstrap-headroom-and-verified-handoff/SPECIFICATION.md`
-- **Plan**: `.specify/specs/automatic-session-bootstrap-headroom-and-verified-handoff/PLAN.md`
-- **Tasks**: `.specify/specs/automatic-session-bootstrap-headroom-and-verified-handoff/TASKS.md`
-- **Current phase**: Maintenance / Investigation
-- **Current task**: Update handoff, update session log, report findings on Spec Kit and Headroom.
+- **Feature**: none
+- **Current phase**: Maintenance
+- **Current task**: Create `bullmq-worker` skill
 
 ## Completed
-- [x] Validated commit `68c39d0`.
-- [x] Investigated "SPEC KIT: missing" cause.
-- [x] Investigated "HEADROOM: unavailable" cause.
-- [x] Refreshed handoff state.
-- [x] Updated session log with new investigation findings.
+- [x] Validated commit `6c6f251`.
+- [x] Inspected existing skills (`session-bootstrap`, `session-handoff`, etc.).
+- [x] Inspected BullMQ, Redis, worker (`src/worker.ts`, `src/lib/queue.ts`), and PM2 (`ecosystem.config.js`) implementation.
+- [x] Created `.cline/skills/bullmq-worker/SKILL.md` enforcing specified constraints.
 
 ## In Progress
 - None
 
 ## Exact Next Action
-1. Wait for user instructions based on investigation report.
+1. Wait for user instructions.
 
 ## Blockers
 - None.
 
 ## Tooling Status
-- **Headroom**: unavailable (v0.32.1 installed, but proxy not detected / configured in environment)
+- **Headroom**: unavailable
 - **RTK**: active
 - **Caveman**: full
 

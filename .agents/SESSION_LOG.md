@@ -213,3 +213,9 @@ Move sessions older than 90 days to `.agents/archive/YYYY-MM/SESSION_LOG_archive
 
 **Next Session**:
 1. Wait for user instructions on whether to activate Headroom/Spec Kit or proceed to ROADMAP tasks.
+
+
+### Create bullmq-worker Skill
+**Date**: 2026-07-26
+**Action**: Created `.cline/skills/bullmq-worker/SKILL.md` to document BullMQ architecture and constraints.
+**Result**: Skill created successfully following existing conventions.
