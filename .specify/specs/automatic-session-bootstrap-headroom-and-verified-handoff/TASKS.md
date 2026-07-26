@@ -1,0 +1,27 @@
+# Tasks
+
+- [ ] Create SPECIFICATION.md
+- [ ] Create CLARIFICATION.md
+- [ ] Create PLAN.md
+- [ ] Create TASKS.md
+- [ ] Create ANALYSIS.md
+- [ ] Create `.ai-memory/BOOTSTRAP.md`
+- [ ] Create `.ai-memory/HANDOFF.md`
+- [ ] Modify `AGENTS.md` (add bootstrap gate)
+- [ ] Create `.cline/rules/00-bootstrap.md`
+- [ ] Create `.cline/rules/10-project-architecture.md`
+- [ ] Create `.cline/rules/20-security-boundaries.md`
+- [ ] Create `.cline/rules/30-context-optimization.md`
+- [ ] Create `.cline/skills/session-bootstrap/SKILL.md`
+- [ ] Create `.cline/skills/session-handoff/SKILL.md`
+- [ ] Create `.cline/skills/headroom-context/SKILL.md`
+- [ ] Create `.cline/skills/speckit-workflow/SKILL.md`
+- [ ] Create `.cline/skills/rtk-terminal/SKILL.md`
+- [ ] Create `.cline/skills/caveman-full/SKILL.md`
+- [ ] Create `.ai-memory/AGENT_INTEGRATIONS.md`
+- [ ] Update `.gitignore`
+- [ ] Create ADR-0003 in `.agents/DECISIONS.md`
+- [ ] Update `.agents/ROADMAP.md`
+- [ ] Update `.agents/SESSION_LOG.md`
+- [ ] Run path validation
+- [ ] Present final completion summary

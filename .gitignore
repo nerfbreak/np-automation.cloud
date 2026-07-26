@@ -29,6 +29,12 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
+
+# Headroom / Runtime AI context
+.headroom-cache/
+.headroom.db
+*.headroom-capture
+
 .env*
 
 # vercel

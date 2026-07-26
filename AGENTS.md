@@ -4,6 +4,35 @@
 
 Read this file at the start of every session. This establishes the contract between human developers and AI collaborators.
 
+# Mandatory Automatic Session Bootstrap
+
+Before responding to, planning, or executing any repository task:
+
+1. Read and execute `.ai-memory/BOOTSTRAP.md`.
+2. Load shared memory in the required order.
+3. Read and verify `.ai-memory/HANDOFF.md` (or `.agents/CURRENT_HANDOFF.md`).
+4. Read active Spec Kit artifacts.
+5. Verify repository state with Git.
+6. Verify Headroom.
+7. Verify RTK.
+8. Apply Caveman Full.
+9. Determine current phase and task.
+
+This applies to every:
+- new session;
+- resumed session;
+- compacted session;
+- handed-over session;
+- model change;
+- agent change;
+- IDE restart;
+- terminal-agent restart;
+- branch change;
+- worktree change.
+
+Do not rely on previous chat context.
+Do not modify product code before bootstrap completes.
+If bootstrap cannot complete, report the blocker and perform only safe diagnostic work.
 ---
 
 ## Purpose

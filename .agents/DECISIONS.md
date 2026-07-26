@@ -192,5 +192,47 @@ Mandate explicitly states: "Do not create duplicate memory systems if an equival
 
 ## Future ADRs
 
+## ADR-0003: Hybrid AI Memory Architecture (Bootstrap vs Context)
+
+**Date**: 2026-07-26  
+**Status**: `accepted`
+
+### Context
+A new mandate required the creation of `.ai-memory/BOOTSTRAP.md`, `.ai-memory/HANDOFF.md`, and `.ai-memory/AGENT_INTEGRATIONS.md`. However, ADR-0002 previously decided to enhance the existing `.agents/` directory for shared memory instead of creating a duplicate `.ai-memory/` directory.
+
+### Decision
+Implement a hybrid approach:
+1. Create `.ai-memory/` strictly for active session mechanics (BOOTSTRAP.md, HANDOFF.md, AGENT_INTEGRATIONS.md) to satisfy the mandate's explicit path requirements.
+2. The BOOTSTRAP.md protocol explicitly loads the project context from the `.agents/` directory (`.agents/README.md`, `.agents/MEMORY.md`, etc.).
+3. Standardize on `.ai-memory/HANDOFF.md` as the canonical verified handoff artifact for future sessions, superseding `.agents/CURRENT_HANDOFF.md`.
+
+### Alternatives Considered
+1. **Put BOOTSTRAP.md in .agents/** — Rejected: violates the mandate's hardcoded path requirements for the entrypoint.
+2. **Move all .agents/ to .ai-memory/** — Rejected: violates ADR-0002 and breaks existing skill paths.
+
+### Consequences
+**Positive:**
+- Full compliance with the new mandate's automated entrypoint.
+- Respects ADR-0002 by preserving `.agents/` as the single source of truth for long-term project knowledge.
+- Clean separation between "how an agent starts" (`.ai-memory/`) and "what the agent knows" (`.agents/`).
+
+**Negative:**
+- Two memory-related directories exist in the root, requiring clear documentation of their boundaries.
+
+### Security Impact
+None.
+
+### Migration Impact
+Agents will transition to reading `.ai-memory/BOOTSTRAP.md` first, which then directs them to the `.agents/` files. `.agents/CURRENT_HANDOFF.md` will be phased out in favor of `.ai-memory/HANDOFF.md`.
+
+### Rollback
+Delete `.ai-memory/` and revert `AGENTS.md` bootstrap instructions.
+
+### Related Files
+- `.ai-memory/BOOTSTRAP.md`
+- `.ai-memory/HANDOFF.md`
+- `AGENTS.md`
+
+
 Add new ADRs below using the same format. Never delete historical records.
 

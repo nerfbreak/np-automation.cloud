@@ -28,6 +28,39 @@ Enhancing existing `.agents/` memory system to meet mandate requirements:
 
 ---
 
+### Test AI Auto-Fix Feature Post-Migration
+**Priority**: High  
+**Owner**: Unassigned
+
+Validate 9Router cloud gateway integration:
+- Wait for GitHub Actions deploy to complete
+- SSH to VPS and add `NINEROUTER_API_KEY` to `.env.local`
+- Restart worker: `pm2 restart np-worker`
+- Trigger build error in Telegram
+- Click "🔮 AI Auto-Fix" button
+- Verify AI response from 9Router
+- Monitor logs for errors
+
+**Dependencies**: 
+- Deploy completion
+- VPS env var manual update (see ISSUE-0001)
+
+**Related**:
+- Commit `bb48ccf` (9Router migration)
+- `.agents/KNOWN_ISSUES.md` ISSUE-0001
+
+### Test `/code` Command Post-Migration
+**Priority**: High  
+**Owner**: Unassigned
+
+Validate `/code` Telegram command with 9Router:
+- Send `/code <query>` in Telegram
+- Verify AI response
+- Check response quality vs previous OmniRoute
+- Monitor performance/latency
+
+**Dependencies**: Same as AI Auto-Fix testing
+
 ## NEXT (Queued)
 
 Ready to start after NOW items complete. Ordered by priority.
