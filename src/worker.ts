@@ -558,6 +558,7 @@ async function handleTelegramUpdate(update: any) {
         const oldCode = fs.readFileSync(fullPath, "utf-8")
         const payload = {
           model: "Act",
+          stream: false,
           messages: [
             {
               role: "system",
