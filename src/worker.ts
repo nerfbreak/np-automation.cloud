@@ -403,7 +403,7 @@ async function handleTelegramUpdate(update: any) {
       }
 
       try {
-        const aiResp = await fetch("https://router.np-automation.cloud/v1/chat/completions", {
+        const aiResp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
           headers: { 
             "Content-Type": "application/json", 
@@ -571,7 +571,7 @@ async function handleTelegramUpdate(update: any) {
           temperature: 0.1
         }
 
-        const aiResp = await fetch("https://router.np-automation.cloud/v1/chat/completions", {
+        const aiResp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
           headers: { 
             "Content-Type": "application/json",
