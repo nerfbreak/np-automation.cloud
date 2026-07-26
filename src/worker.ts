@@ -387,7 +387,7 @@ async function handleTelegramUpdate(update: any) {
       const compilerError = lastBuildError.errorMsg
 
       const payload = {
-        model: "auto",
+        model: "Act",
         stream: false,
         messages: [
           {
@@ -557,7 +557,7 @@ async function handleTelegramUpdate(update: any) {
       try {
         const oldCode = fs.readFileSync(fullPath, "utf-8")
         const payload = {
-          model: "auto",
+          model: "Act",
           messages: [
             {
               role: "system",
