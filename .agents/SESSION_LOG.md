@@ -219,3 +219,4 @@ Move sessions older than 90 days to `.agents/archive/YYYY-MM/SESSION_LOG_archive
 **Date**: 2026-07-26
 **Action**: Created `.cline/skills/bullmq-worker/SKILL.md` to document BullMQ architecture and constraints.
 **Result**: Skill created successfully following existing conventions.
+2026-07-27: Analyzed Next.js API routes, worker process, and Supabase client setup for database operations. Created .cline/skills/supabase-data/SKILL.md to enforce Supabase best practices, boundaries, and safe data access patterns.

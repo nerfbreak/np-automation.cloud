@@ -4,25 +4,25 @@
 > Verify against Git, Spec Kit, source code, and tests before continuing.
 
 ## Session Metadata
-- **Updated**: 2026-07-26
+- **Updated**: 2026-07-27
 - **Previous agent**: Cline
 - **Branch**: master
-- **Last known commit**: 6c6f251
+- **Last known commit**: 1eef239
 - **Working tree**: dirty
 
 ## Current Objective
-Create a project-local Cline skill named `bullmq-worker` to enforce BullMQ worker constraints, queue safety, and Next.js separation.
+Create a project-local Cline skill named `supabase-data` to enforce Supabase best practices, boundaries, and safety for Next.js and worker operations.
 
 ## Active Spec Kit Context
 - **Feature**: none
 - **Current phase**: Maintenance
-- **Current task**: Create `bullmq-worker` skill
+- **Current task**: Create `supabase-data` skill
 
 ## Completed
-- [x] Validated commit `6c6f251`.
-- [x] Inspected existing skills (`session-bootstrap`, `session-handoff`, etc.).
-- [x] Inspected BullMQ, Redis, worker (`src/worker.ts`, `src/lib/queue.ts`), and PM2 (`ecosystem.config.js`) implementation.
-- [x] Created `.cline/skills/bullmq-worker/SKILL.md` enforcing specified constraints.
+- [x] Executed `.ai-memory/BOOTSTRAP.md` and read shared memory context.
+- [x] Inspected existing skills structure.
+- [x] Analyzed Supabase client setup (`src/lib/supabase.ts`), worker (`src/worker.ts`), and audit log usage (`src/lib/audit.ts`).
+- [x] Created `.cline/skills/supabase-data/SKILL.md` enforcing specified constraints.
 
 ## In Progress
 - None
@@ -34,7 +34,7 @@ Create a project-local Cline skill named `bullmq-worker` to enforce BullMQ worke
 - None.
 
 ## Tooling Status
-- **Headroom**: unavailable
+- **Headroom**: active
 - **RTK**: active
 - **Caveman**: full
 
